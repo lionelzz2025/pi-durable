@@ -1,0 +1,16 @@
+# Normalize everything to LF in the repo AND in the working copy.
+# The system Git config on Windows defaults to core.autocrlf=true,
+# which fights LF-authored ESM/TS sources — pin it here instead.
+* text=auto eol=lf
+
+# Binary assets: never touch line endings
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.sqlite binary
+
+# Lock file: keep it diffable (dependency changes should be reviewable),
+# but mark it generated so GitHub collapses it and hides it from language stats.
+package-lock.json  linguist-generated
