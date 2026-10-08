@@ -1,6 +1,6 @@
 # pi-durable 学习项目
 
-用 `@earendil-works/pi-durable` 从零搭一个"可持久化 AI Agent"的最小工程，并附 4 个可运行示例。
+用 `@earendil-works/pi-durable` 从零搭一个"可持久化 AI Agent"的最小工程，并附 5 个可运行示例（最后一个接真实模型）。
 
 > 版本：`@earendil-works/pi-durable@1.1.0`（官方标注 **Experimental**，API 会变）
 > 环境：Node **≥ 22.6**（用到内置 `node:sqlite`）+ TypeScript
@@ -15,10 +15,11 @@ npm run hello        # 01 最小问答（零 API Key，用 faux 假模型）
 npm run durable      # 02 SQLite 落盘 + 重开继续同一段对话
 npm run crash        # 03 中途"崩溃" + 重开后自动续跑（核心卖点）
 npm run tools        # 04 接上 read/write/edit/bash 真实文件工具
+npm run real         # 05 接真实模型（FastHub / deepseek-v4.1-flash，需 API Key）
 npm run typecheck    # tsc --noEmit
 ```
 
-全部示例用 `fauxProvider()` 这个"剧本模型"，不需要任何密钥就能跑通。换成真模型见 [第 6 节](#6-换成真实模型)。
+01–04 用 `fauxProvider()` 这个"剧本模型"，不需要任何密钥就能跑通。05 会真的发请求，需要先 `export FH_NOVOSNS_API_KEY=...`（见 [第 6 节](#6-换成真实模型)）。
 
 ---
 
@@ -79,12 +80,16 @@ submit(input) → pi.user
 pi-durable/
 ├── package.json          # "type": "module"，Node ≥22.6
 ├── tsconfig.json         # module/moduleResolution: nodenext, noEmit
-├── data/                 # SQLite 落盘目录（示例用）
+├── data/                 # SQLite 落盘目录（示例用，已 gitignore）
+├── src/
+│   └── providers/
+│       └── fasthub.ts         # 自定义 OpenAI 兼容 provider（FastHub 网关）
 ├── examples/
 │   ├── 01-hello.ts            # 最小问答
 │   ├── 02-durable-sqlite.ts   # 落盘 + 重开继续
 │   ├── 03-crash-resume.ts     # 崩溃续跑 + requestId 幂等
-│   └── 04-coding-tools.ts     # 文件/Shell 工具
+│   ├── 04-coding-tools.ts     # 文件/Shell 工具
+│   └── 05-real-model.ts       # 真实模型 + 跨进程记忆
 └── README.md
 ```
 
@@ -247,6 +252,37 @@ await Harness.open(storage, {
    - 进程死在调用中途时：声明了 `replay: "safe"` 才会重跑，否则模型收到 `interrupted` 错误结果 + 已提交的输出；
    - `execute()` 抛异常 → 给模型一个错误结果（而不是炸掉整轮）。
 
+### 05 — 真实模型（`examples/05-real-model.ts`）
+
+前四个例子都用剧本模型，这一条真的发请求：**FastHub 网关上的 `deepseek/deepseek-v4.1-flash`**，也就是 pi 自己此刻在用的那个模型和那份凭据。
+
+```bash
+export FH_NOVOSNS_API_KEY=sk-fh-...
+npm run real
+```
+
+输出：
+
+```
+[phase 1] model: fasthub-novosns / deepseek/deepseek-v4.1-flash
+[phase 1] answer: Got it, Pi—I'll remember your name for this conversation.
+[phase 1] closed. Transcript on disk: D:\tools\pi-durable\data\real-model.sqlite
+[phase 2] replayed from disk: pi.assistant, pi.system, pi.user
+[phase 2] answer: You told me your name is Pi.
+[phase 2] usage: {"fasthub-novosns/deepseek/deepseek-v4.1-flash":{"input":125,"output":128,
+         "cacheRead":0,"cacheWrite":0,"reasoning":104,"totalTokens":253,"cost":{...全部 0}}}
+```
+
+两个 phase 是**两段独立的 Harness 生命周期**（第二个 `Harness.open()` 之前第一个已经 `close()`）。phase 2 能答出名字，唯一的可能来源是 phase 1 写进 SQLite 的 transcript —— 第 02 节那个论断的真实模型版本。
+
+代码上跟 02 的差别只有一行：
+
+```ts
+models.setProvider(fasthubProvider());   // 原来是 fauxProvider({ ... })
+```
+
+provider 定义在 `src/providers/fasthub.ts`，里面的坑见下面第 6.2 节。
+
 ---
 
 ## 5. 自己写 extension：工具 + 系统提示词 + 钩子
@@ -303,7 +339,7 @@ const Timing = defineExtension({
 
 ## 6. 换成真实模型
 
-示例里我用 `fauxProvider()`（可编排剧本的假模型）。切换只改 3 行：
+### 6.1 用内置 provider：只改 3 行
 
 ```ts
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
@@ -315,6 +351,60 @@ await harness.root(context, { agent: { model: { provider: "openai", modelId: "gp
 ```
 
 可用的 provider 目录在 `@earendil-works/pi-ai/providers/*`，如 `anthropic` / `google` / `deepseek` / `azure` / `amazon-bedrock` / `cloudflare-workers-ai` / `github-copilot` 等。
+
+### 6.2 自己的网关：FastHub / deepseek-v4.1-flash
+
+内置目录里没有你的网关，所以 `models.setProvider()` 之外没别的入口 —— **`Models` 只认识你亲手交给它的 provider**。本项目走的就是这条路，完整实现在 `src/providers/fasthub.ts`。
+
+```ts
+import { createProvider, envApiKeyAuth, openAICompletionsApi, type Model } from "@earendil-works/pi-ai/compat";
+
+export const fasthubFlash: Model<"openai-completions"> = {
+  id: "deepseek/deepseek-v4.1-flash",
+  name: "DeepSeek V4.1 Flash (FastHub)",
+  api: "openai-completions",
+  provider: "fasthub-novosns",
+  baseUrl: "https://fasthub.novosns.com/v1",
+  reasoning: true,
+  input: ["text"],
+  contextWindow: 1_000_000,
+  maxTokens: 64_000,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },   // 该模型不计费
+  compat: { /* 见下表 */ },
+};
+
+export function fasthubProvider() {
+  // 泛型必须显式写：`openAICompletionsApi()` 返回的是整张 ProviderStreams 表，
+  // 推不出单个 api，TApi 会退回 Api，然后 setProvider 拒收。
+  return createProvider<"openai-completions">({
+    id: "fasthub-novosns",
+    name: "FastHub (novosns)",
+    baseUrl: "https://fasthub.novosns.com/v1",
+    auth: { apiKey: envApiKeyAuth("FastHub novosns API key", ["FH_NOVOSNS_API_KEY"]) },
+    models: [fasthubFlash],
+    api: openAICompletionsApi(),
+  });
+}
+```
+
+**类型从哪里导？** `Model` / `Provider` 从 `@earendil-works/pi-ai/compat` 导（它 `export * from "./index.ts"`），**不从 `/models`** —— `/models` 内部 import 了 `Model` 但没有 re-export，写 `import type { Model } from "@earendil-works/pi-ai/models"` 会报 `TS2724: has no exported member named 'Model'. Did you mean 'Models'?`。
+
+#### `compat` 是全部难点所在
+
+pi-ai 会从 baseUrl 猜这套兼容位；**猜不出来的 URL 会落到保守默认值**。所以自定义网关必须逐位显式声明。FastHub 实测结论：
+
+| 字段 | 值 | 为什么 |
+|---|---|---|
+| `supportsDeveloperRole` | `false` | 网关拒收 `developer` 角色，系统提示词得走 `system` |
+| `supportsReasoningEffort` | `false` | 没有 `reasoning_effort` 旋钮。**但推理仍在跑** —— 关掉这个开关后探针测到 47 个 reasoning token，`npm run real` 里是 104 |
+| `maxTokensField` | `"max_tokens"` | 不接 `max_completion_tokens` |
+| `thinkingFormat` | **不要设 `"deepseek"`** | 看起来最该设的一个，实测反而把 reasoning 打到 **0**，且思维内容渗进可见回复 —— 因为该端点在正文之外**本来就**吐 `reasoning_content` |
+
+> `reasoning: true` + 不设 `thinkingFormat`，是个反直觉但实测正确的组合。验证方式是看 `harness.usage()` 里的 `reasoning` 计数：大于 0 就说明推理链路是通的。
+
+#### 跟 pi 自己保持同步
+
+pi 的同名 entry 在 `~/.pi/agent/models.json` 的 `fasthub-novosns` 下。两端用同一个 baseUrl 和同一个 `FH_NOVOSNS_API_KEY`；**端点或模型改名时两边都要改**，改完跑 `npm run real` 确认。
 
 **每段对话可以配不同的 Agent**，用 `configure()` 一次 commit 改完：
 
@@ -424,6 +514,14 @@ type SettledSubmissionRecord = SubmissionRecord & { status: "done" | "unanswered
    `ExperimentalWarning: SQLite is an experimental feature`。项目里 Node 24 实测正常。
 10. **TS 直接运行**依赖 Node 的类型剥离，因此**不能用 `enum` / `namespace` / 构造函数参数属性**这类需要代码生成的语法。示例全用 `const` 对象 + `type`。
 11. **重启后必须重新安装同样的 extension**：extension 的 `tasks` 只有在装回去之后，pending task 才会继续。（对话只存 extension 的**名字**，不存代码。）
+12. **自定义 provider 时 `Model` / `Provider` 得从 `@earendil-works/pi-ai/compat` 导**，不从 `/models`。
+    `/models` 内部 import 了 `Model` 却没 re-export，报 `TS2724: has no exported member named 'Model'. Did you mean 'Models'?`
+13. **`createProvider` 的 api 泛型推不出来**：`openAICompletionsApi()` 返回整张 `ProviderStreams` 表，
+    必须显式写 `createProvider<"openai-completions">(...)`，否则 `models.setProvider()` 报
+    `Type 'Provider<keyof ProviderStreams>' is not assignable to type 'Provider<"openai-completions">'`。
+14. **自建网关的 `compat` 别靠猜**：从 baseUrl 推不出来的会落保守默认。而且反直觉的是，
+    `thinkingFormat: "deepseek"` 在 FastHub 上反而把 reasoning 打到 0；换个字段就跑一次，
+    用 `harness.usage().models["..."].reasoning` 判断推理链路是不是真的通了。
 
 ---
 
@@ -437,7 +535,7 @@ type SettledSubmissionRecord = SubmissionRecord & { status: "done" | "unanswered
 - **用量计费**：`harness.usage(context)`，按 `provider/model` 与 tool 名汇总。
 - **其它存储**：Bun / Cloudflare Durable Objects 都有对应适配器。
 
-官方仓库里的 `test/examples/` 有一整套从简到繁的示例，本项目 01–04 是在那基础上精简出的"最短可运行路径"。
+官方仓库里的 `test/examples/` 有一整套从简到繁的示例，本项目 01–05 是在那基础上精简出的"最短可运行路径"。
 
 ---
 
@@ -447,7 +545,13 @@ type SettledSubmissionRecord = SubmissionRecord & { status: "done" | "unanswered
 {
   "type": "module",
   "engines": { "node": ">=22.6" },
-  "dependencies": { "@earendil-works/pi-durable": "^1.1.0" },
+  "dependencies": {
+    // pi-durable 声明了这两个作为自己的依赖，但示例和 src/ 直接 import 它们，
+    // 所以这里也显式声明（同版本区间会被 npm 去重成同一份，不会出现两份 pi-ai）。
+    "@earendil-works/chord": "^1.1.0",
+    "@earendil-works/pi-ai": "^1.1.0",
+    "@earendil-works/pi-durable": "^1.1.0"
+  },
   "devDependencies": { "@types/node": "^24.0.0", "typescript": "^5.7.0" }
 }
 ```

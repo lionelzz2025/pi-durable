@@ -12,9 +12,12 @@
     "durable": "node examples/02-durable-sqlite.ts",
     "crash": "node examples/03-crash-resume.ts",
     "tools": "node examples/04-coding-tools.ts",
+    "real": "node examples/05-real-model.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/chord": "^1.1.0",
+    "@earendil-works/pi-ai": "^1.1.0",
     "@earendil-works/pi-durable": "^1.1.0"
   },
   "devDependencies": {
