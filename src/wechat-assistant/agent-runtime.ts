@@ -4,6 +4,7 @@ import { requireAssistantCapabilities } from "./capabilities.ts";
 import { ensureBoundConversation, submitReceivedInbox } from "./conversations.ts";
 import { openWechatHarness } from "./runtime.ts";
 import { reconcileInbox } from "./settlement.ts";
+import { enqueueAnswers, recoverOutbox } from "./outbox.ts";
 import { ChannelState } from "./documents.ts";
 
 /** No polling before required capabilities have been checked. Provider selection
@@ -26,6 +27,10 @@ export const openAssistantRuntime = async (databasePath: string, options: Harnes
       if (!registry.task(task.record.kind)) throw Error("Persisted task definition unavailable");
     }
     await reconcileInbox(harness);
+    // A crash may have left a send in flight (unknown) or an answer without an
+    // outbox record; recover before admitting new work, then enqueue any answers.
+    await recoverOutbox(harness);
+    await enqueueAnswers(harness, { recipient: binding.userId });
     await submitReceivedInbox(harness);
     harness.resume();
     return harness;

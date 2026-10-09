@@ -17,11 +17,11 @@ PLAN_ID: 2026-10-08-personal-assistant-memory-v0-1
 
 ## Current Phase
 
-新路线：B0–B3 complete，B4 in_progress，B5–B7 pending；B3 已实现待办工具（复用领域事务与幂等回执）、独立长期记忆（新增/检索/更正/遗忘 + 有界提示注入）并验证跨 reset/压缩/重启可检索。B2 已完成持久 inbox/绑定/FIFO、Harness/模型/工具守卫与结算补扫、以及绕过模型的确定性控制命令，离线硬杀恢复通过。B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
+新路线：B0–B4 complete（B4 仅“文字内测”），B5 in_progress，B6–B7 pending；B4 已实现 durable outbox（答案补扫、UTF-8 分片、发送回执、退避、blocked/outcome_unknown 与人工 `/retry`）并完成假微信→真 Harness+faux→假微信全链路故障窗口测试与重启续传。B3 已实现待办工具（复用领域事务与幂等回执）、独立长期记忆（新增/检索/更正/遗忘 + 有界提示注入）并验证跨 reset/压缩/重启可检索。B2 已完成持久 inbox/绑定/FIFO、Harness/模型/工具守卫与结算补扫、以及绕过模型的确定性控制命令，离线硬杀恢复通过。B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
 
 ## Next Step
 
-继续 B4：实现 durable outbox（答案补扫建 outbox、分片、发送回执、退避、blocked/outcome_unknown 与人工重试），并做“假微信 → 真 SQLite/Harness + faux provider → 假微信”全链路故障窗口测试；重启无需用户补发消息即可继续 pending 工作和安全可发送回复。B4 仅可标“文字内测”。真实连接仍需授权。
+继续 B5：图片/文件入站与出站（能力检查、大小/路径/URL 边界、明确不支持提示）、read/write/edit 工作区权限策略与发送工具、默认关闭的 shell 与持久审批、durable 任务状态/取消/恢复，以及本地提醒调度与 occurrence outbox。
 
 ## Scope 与完成定义
 
@@ -174,10 +174,10 @@ B0–B4 可形成文字内测里程碑；**不能据此声称完整交付**。�
 - **Status:** complete
 
 ### Phase B4: durable outbox 与文字恢复闭环
-- [ ] 答案补扫建 outbox、分片、发送回执、退避、blocked/outcome_unknown 与人工重试。
-- [ ] 假微信 → 真 SQLite/Harness + faux provider → 假微信，全链路故障窗口测试。
-- [ ] 重启无需用户补发消息即可继续 pending 工作和安全可发送回复。
-- **Status:** pending
+- [x] 答案补扫建 outbox、分片、发送回执、退避、blocked/outcome_unknown 与人工重试。
+- [x] 假微信 → 真 SQLite/Harness + faux provider → 假微信，全链路故障窗口测试。
+- [x] 重启无需用户补发消息即可继续 pending 工作和安全可发送回复。
+- **Status:** complete
 - 此处仅可标“文字内测”，不是完整完成。
 
 ### Phase B5: 媒体、工作区工具、任务与提醒

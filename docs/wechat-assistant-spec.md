@@ -37,7 +37,7 @@
 - Binding：accountId、boundUserId、conversationId、schemaVersion；在 commit 内创建 conversation 并保存映射。
 - Inbox：稳定键 hash(accountId/userId/messageId 的 JSON 数组)、payloadHash、payload、receivedAt、requestId、submissionId；状态 received/submitted/settled/quarantined。同 ID 不同 hash 隔离，不用随机 ID 补缺失 ID。
 - PollState：cursor、各 binding 的 context token；与同批 inbox 原子提交。
-- Outbox：逻辑 answer/分片唯一键、payloadHash、接收者、冻结媒体引用、attempts、nextAttemptAt、lastError；pending/sending/sent/blocked/outcome_unknown。未知结果不自动重发。
+- Outbox：逻辑 answer/分片唯一键、payloadHash、接收者、冻结媒体引用、attempts、nextAttemptAt、lastError；pending/sending/sent/blocked/outcome_unknown。未知结果不自动重发。实现唯一键为 `${conversationId}:${answerEntryId}`，每分片预生成稳定 `clientId`；`chunkBytes=2048`、`maxRecords=1000`、`sendAttempts` 取配置（默认 5）；启动将遗留 `sending` 转为 `outcome_unknown`。
 - Memory：id、content、source、createdAt、updatedAt、active；逻辑遗忘保留审计提醒。实现新增 `operationId` 字段：`memory_add` 以工具调用 id 为幂等键，重放不重复存储；容量上限 500 条，新增到上限时阻止而不是静默淘汰。
 - Todo：复用旧库 `assistant.todo`/`assistant.receipt` 文档族与归一化规则，但由 Harness 工具写入；新增 `assistant.todo-index` 会话文档维护创建顺序索引（上限 5000），因为 `DocumentReader` 只提供点读、无扫描，`todo_list` 依赖该索引。索引可由 B6 迁移重建。
 - Reminder：id、dueAt、timezone、occurrenceId、outboxId；pending/dispatched/cancelled/blocked。
@@ -50,5 +50,7 @@ Documents 不承担无限数据规模：达到容量保留并阻止新增；B6 �
 `tests/wechat-assistant/recovery.test.ts` 用 faux provider + 隔离 SQLite + 真实子进程硬杀，证明 model retry、相同 root/requestId、已提交答案重读、provider identity 保留、幂等 safe 工具重放、unsafe 工具 interrupted 且外部标记不重做，以及数据库第二 Harness 拒绝/硬杀后释放。此处 safe 指测试工具通过 taskId 事务去重，不代表任意工具都安全。
 
 B3 证据：`tests/wechat-assistant/tools.test.ts` 证明待办 create/list/get/complete 的幂等回执（同 callId 重放不重复、异内容冲突）、分页不重不漏、记忆新增/检索/更正/遗忘、遗忘后不再检索、`memory_add` 重放幂等、提示注入按预算整条省略且超小预算不注入碎片、以及重启后回执/记忆仍在。`tests/wechat-assistant/memory-persistence.test.ts` 证明记忆跨新会话（reset）、真实压缩任务和进程重开仍被注入。
+
+B4 证据：`tests/wechat-assistant/outbox.test.ts` + `sender.test.ts` 用假微信入站、真 SQLite/Harness、faux provider 与假发送端证明：同一答案只建一条 outbox 记录且重扫不重复、长答案 UTF-8 分片按序发送、确定失败退避并在上限转 blocked、网络未知转 outcome_unknown 且不再自动重发（仅 `/retry` 可重试）、崩溃遗留 `sending` 恢复为 outcome_unknown、答案已提交而 outbox 未建时重启只补建一次、context token 失效转 blocked 并在刷新后恢复。这些均不代表真实微信端 exactly-once。
 
 仅 B0 可行性证据，不是 inbox/outbox/微信闭环测试。账号锁与旧插件协调、context token 有效期、发送 client ID 是否远端去重仍未知，分别在 B1/B4/真实微信验收证明；未知时不得无人值守切换或盲重发。

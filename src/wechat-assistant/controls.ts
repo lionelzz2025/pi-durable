@@ -1,10 +1,11 @@
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { AgentDoc, configure, defineDoc, type ConversationId, type Harness, type TaskId } from "@earendil-works/pi-durable";
 import { ChannelState } from "./documents.ts";
+import { retryOutbox } from "./outbox.ts";
 
-export type Control = "status" | "cancel" | "new" | "compact";
+export type Control = "status" | "cancel" | "new" | "compact" | "retry";
 export const parseControl = (text: string): Control | undefined => {
-  const commands: Record<string, Control> = { "/status": "status", "/cancel": "cancel", "/new": "new", "/compact": "compact" };
+  const commands: Record<string, Control> = { "/status": "status", "/cancel": "cancel", "/new": "new", "/compact": "compact", "/retry": "retry" };
   return Object.hasOwn(commands, text.trim()) ? commands[text.trim()] : undefined;
 };
 type Receipt = { command: Control; conversationId: ConversationId; state: "pending" | "running" | "complete" | "needs_review"; result: string; taskId: TaskId | null };
@@ -54,6 +55,10 @@ export const executeControl = async (harness: Harness, key: string, command: Con
     await harness.commit(async (tx) => { (await tx.doc(ControlReceipts)).records[key]!.state = "running"; }, context);
     const taskId = await conversation.compact(undefined, context);
     receipt = { ...receipt, state: "complete", taskId, result: `Compaction admitted as task ${taskId}; not yet completed` };
+  } else if (receipt.command === "retry") {
+    await harness.commit(async (tx) => { (await tx.doc(ControlReceipts)).records[key]!.state = "running"; }, context);
+    const count = await retryOutbox(harness);
+    receipt = { ...receipt, state: "complete", result: `Manual retry queued ${count} outbox record(s)` };
   } else if (receipt.command === "cancel") {
     await harness.commit(async (tx) => { (await tx.doc(ControlReceipts)).records[key]!.state = "running"; }, context);
     await conversation.abort(context);

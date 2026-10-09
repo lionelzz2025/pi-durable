@@ -1,5 +1,15 @@
 # Progress Log
 
+## B4 完成：durable outbox 与文字恢复闭环（文字内测）
+
+三条 B4 范围项均已有实现与测试证据，按计划标注 complete **但仅代表“文字内测”里程碑**，非完整交付。全量 `npm test` 114/114、`npm run typecheck` 通过。
+
+- outbox（`outbox.ts`）：`Outbox` 文档按 `${conversationId}:${answerEntryId}` 唯一键去重建记录；`splitMessage` 按 UTF-8 字节分片且从不切开代理对；发送前先提交 `sending`。
+- 发送策略：`drainOutbox` 逐条发完所有分片；确定失败按上限退避、达 `sendAttempts` 转 `blocked`；`ProtocolError(kind=network)` 经 `senderFromApi` 转 `SendOutcomeUnknown` → `outcome_unknown`，绝不自动重发；`/retry` 控制命令提供人工重试。
+- 恢复：`recoverOutbox` 将崩溃遗留的 `sending` 转 `outcome_unknown`；`enqueueAnswers` 启动补扫，答案已提交但 outbox 未建时重启只补建一次。agent-runtime 启动顺序改为 recoverOutbox → enqueueAnswers → submit。
+- 测试：`outbox.test.ts`(7) 分片/幂等/重启续传/退避封顶/未知不重发/崩溃窗口/context-token 刷新；`sender.test.ts`(2) 网络 vs HTTP 错误分类与真实请求体。均使用假微信入站 + 真 SQLite/Harness + faux provider + 假发送端。
+- 收尾审计：N11/N12/N13 的离线部分有证据；`/retry` 已接入 controls。真实微信发送次数与远端幂等仍未知，属 W 系列，不得据此声称 exactly-once。
+
 ## B3 完成：待办工具与独立长期记忆
 
 三条 B3 范围项均已有实现与测试证据，标记 complete。全量 `npm test` 104/104、`npm run typecheck` 通过。
