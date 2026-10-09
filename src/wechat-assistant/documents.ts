@@ -2,6 +2,7 @@ import { defineDoc, type ConversationId, type SubmissionId } from "@earendil-wor
 export type InboxRecord = {
   key: string; payloadHash: string; payload: string; receivedAt: number;
   requestId: string; submissionId: SubmissionId | null;
+  conversationId?: ConversationId;
   status: "received" | "submitted" | "settled" | "quarantined";
 };
 export const ChannelState = defineDoc<{

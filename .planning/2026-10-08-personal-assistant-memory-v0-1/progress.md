@@ -1,5 +1,33 @@
 # Progress Log
 
+## B2 继续：控制命令、运行时工厂及结算补扫
+
+- 新增 agent-runtime.ts：必要工具校验先于存储/调度，绑定→补扫结算→投递→resume。真实 provider/CLI 仍未接，不伪装模型可用。
+- controls.ts 精确 /status /cancel /new /compact，不交模型解释；/new 建会话/复制 AgentDoc/切映射/回执同事务。cancel/compact admission 与回执之间崩溃标 needs_review，不盲重发或误取消后续工作。
+- 新增 settlement.ts 从已提交 submission.status 重建 inbox settled；不代表微信已交付，答案/outbox 在 B4。
+- controls parser/new/reopen/未知窗口测试2/2，合 capability/inbox 7/7/typecheck通过。收尾发现 /new 需复制模型配置，已通过 public configure(tx) 同事务修正并断言。
+- 投递与控制目标固定到原 conversationId；B2 仍待真实硬杀专项、FIFO/恢复/结算集成与全量验证，不标完成。
+
+## B2 完成：持久 inbox 与会话运行时
+
+三条 B2 范围项均已有实现与测试证据，标记 complete。
+
+- inbox/cursor/context 原子接收、稳定去重、绑定、FIFO/背压：`conversations.ts`、`inbox.ts`、`documents.ts`；容量满走 InboxCapacityError 回滚整批，不清空去重状态。
+- 接线/守卫/恢复/关联补偿：`agent-runtime.ts`（能力守卫→模型存在性→schema→绑定→task 定义→结算补扫→投递→resume）、`capabilities.ts`、`settlement.ts`。
+- 控制命令绕过模型：`controls.ts` 精确匹配 /status /cancel /new /compact，/new 建会话+复制 AgentDoc+切映射+回执同事务；admission 与回执间崩溃标 needs_review，不盲重发。
+- 新增测试：`agent-runtime.test.ts`(2)、`controls.test.ts`(2)、`capabilities.test.ts`(1)、`readiness.test.ts`(1)、`inbox-crash.test.ts`(2，子进程硬杀 after-inbox/after-submit 后重开不重发、不重复输入、cursor 已提交)。
+- 全量：`npm test` 97/97 通过、`npm run typecheck` 通过、`git diff --check` 干净；无 skip。
+- 真实微信/真实模型仍未接入，属 B4–B7；此处只声明离线闭环通过。
+- 收尾审计：B2 三项 bullet 逐条映射到文件与测试；N05/N06/N07 的 B2 部分有证据，N04/N05 完整判定仍待 B4 端到端补足。
+
+## B2 开始：能力守卫与提交目标固定
+
+- B1 已本地提交 `5c56618`，提交后工作区干净，未 push。
+- 新增 capabilities.ts：显式待办/记忆必要工具名，缺失或重复均 fail-closed，无全局 fallback；专项1/1通过，待接运行时。
+- inbox 投递先事务固定 conversationId，再 submit；避免未来切换映射后以相同 requestId 在新会话重复执行。原关联测试仍通过；将补映射变化与控制命令恢复专项。
+- typecheck、capability+inbox 5/5、diff --check通过。B2 尚未完成，不提交阶段完成。
+- 类型探索误读不存在 harness/conversation.d.ts（rg error 2），改读 harness/types.d.ts；恢复 API 使用真实 Conversation.abort/compact/reset 及 Tx.createConversation，不编造调用。
+
 ## B1 收尾通过，进入 B2
 
 - 按阶段范围核对协议/API/CDN、MIT来源、凭据事务、身份、跨进程账号锁与硬杀释放、QR到期、轮询退避/取消、生命周期关闭顺序及 config/CLI。

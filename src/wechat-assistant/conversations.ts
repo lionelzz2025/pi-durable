@@ -1,6 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Harness, ModelRef } from "@earendil-works/pi-durable";
 import { ChannelState } from "./documents.ts";
+import { executeControl, parseControl } from "./controls.ts";
 
 /** Single-account v1 uses reserved root: if killed before mapping commit,
  * root() reopens the same ID, not an orphan/new conversation. */
@@ -30,15 +31,36 @@ export const ensureBoundConversation = async (harness: Harness, binding: {
 export const submitReceivedInbox = async (harness: Harness): Promise<void> => {
   const state = await harness.snapshot(ChannelState, BACKGROUND_CONTEXT);
   if (!state?.conversationId) throw Error("Inbox has no bound conversation");
-  const conversation = await harness.conversation(state.conversationId, BACKGROUND_CONTEXT);
-  if (!conversation) throw Error("Bound conversation missing");
   for (const record of state.inbox) {
     if (record.status !== "received") continue;
+    // Freeze the destination before submit. A mapping change must not redirect
+    // a retry's conversation-scoped request ID into a second conversation.
+    const conversationId = await harness.commit(async (tx) => {
+      const current = await tx.doc(ChannelState);
+      const target = current.inbox.find((item) => item.key === record.key);
+      if (!target || target.payloadHash !== record.payloadHash) throw Error("Inbox association changed");
+      const id = target.conversationId ?? current.conversationId;
+      if (id === null) throw Error("Inbox has no bound conversation");
+      target.conversationId = id;
+      return id;
+    }, BACKGROUND_CONTEXT);
+    const conversation = await harness.conversation(conversationId, BACKGROUND_CONTEXT);
+    if (!conversation) throw Error("Bound conversation missing");
     const payload = JSON.parse(record.payload) as { items: Array<{ type: number; text_item?: { text?: unknown }; voice_item?: { text?: unknown } }> };
     const text = payload.items.map((item) => {
       const value = item.type === 1 ? item.text_item?.text : item.type === 3 ? item.voice_item?.text : undefined;
       return typeof value === "string" ? value : "[Unsupported attachment; media integration pending]";
     }).join("\n");
+    const command = payload.items.length === 1 && payload.items[0]?.type === 1 ? parseControl(text) : undefined;
+    if (command) {
+      await executeControl(harness, record.key, command, conversationId);
+      await harness.commit(async (tx) => {
+        const target = (await tx.doc(ChannelState)).inbox.find((item) => item.key === record.key);
+        if (!target) throw Error("Control inbox disappeared");
+        target.status = "settled";
+      }, BACKGROUND_CONTEXT);
+      continue;
+    }
     const submission = await conversation.submit({ type: "input", requestId: record.requestId, content: text, whenBusy: "followUp" }, BACKGROUND_CONTEXT);
     await harness.commit(async (tx) => {
       const current = await tx.doc(ChannelState);

@@ -17,11 +17,11 @@ PLAN_ID: 2026-10-08-personal-assistant-memory-v0-1
 
 ## Current Phase
 
-新路线：B0–B1 complete，B2 in_progress，B3–B7 pending；B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
+新路线：B0–B2 complete，B3 in_progress，B4–B7 pending；B2 已完成持久 inbox/绑定/FIFO、Harness/模型/工具守卫与结算补扫、以及绕过模型的确定性控制命令，离线硬杀恢复通过。B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
 
 ## Next Step
 
-继续 B2：接线 Harness/模型/必要工具守卫、自动恢复及确定性控制命令；持久 inbox 与绑定原型已有测试。用户已选择方案 A，正式切换前停止旧插件并禁用自动启动；真实连接仍需授权。
+继续 B3：实现待办工具（复用领域事务与幂等回执，不依赖旧服务）和独立长期记忆（新增/检索/更正/遗忘 + 有界提示注入），并验证跨 reset/压缩/重启后仍可检索，工具重放分类与“成功必须有持久结果”。B4 再建 durable outbox 与文字恢复闭环。真实连接仍需授权。
 
 ## Scope 与完成定义
 
@@ -162,10 +162,10 @@ B0–B4 可形成文字内测里程碑；**不能据此声称完整交付**。�
 - **Status:** complete
 
 ### Phase B2: 持久 inbox 与会话运行时
-- [ ] inbox/cursor/context 原子接收、稳定去重、绑定会话、FIFO 和背压。
-- [ ] Harness/模型/Registry 接线、启动必需能力守卫、自动 resume 与 submission 关联补偿。
-- [ ] 状态/取消/新会话/压缩命令绕过模型自由解读，身份同样校验。
-- **Status:** in_progress
+- [x] inbox/cursor/context 原子接收、稳定去重、绑定会话、FIFO 和背压。
+- [x] Harness/模型/Registry 接线、启动必需能力守卫、自动 resume 与 submission 关联补偿。
+- [x] 状态/取消/新会话/压缩命令绕过模型自由解读，身份同样校验。
+- **Status:** complete
 
 ### Phase B3: 待办与独立长期记忆
 - [ ] 待办工具复用领域事务与幂等回执，不依赖旧服务。
