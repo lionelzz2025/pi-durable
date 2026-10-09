@@ -1,0 +1,19 @@
+{
+  "name": "pi-durable-assistant-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "pi extension that exposes the local durable assistant service as four todo tools",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  }
+}
