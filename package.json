@@ -14,6 +14,7 @@
     "tools": "node examples/04-coding-tools.ts",
     "real": "node examples/05-real-model.ts",
     "assistant": "node src/assistant/main.ts",
+    "wechat-assistant": "node src/wechat-assistant/main.ts",
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },

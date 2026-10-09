@@ -1,5 +1,57 @@
 # Progress Log
 
+## B1 收尾通过，进入 B2
+
+- 按阶段范围核对协议/API/CDN、MIT来源、凭据事务、身份、跨进程账号锁与硬杀释放、QR到期、轮询退避/取消、生命周期关闭顺序及 config/CLI。
+- receive-only 将 inbox/cursor 原子提交并在重开读取旧游标，无模型/回复；docs/wechat-assistant.md 明示里程碑、明文凭据与 Windows ACL、旧插件停用前提和真实 Ctrl-C 待验证。
+- npm test 全量 89/89，通过 typecheck 与 diff --check；未使用真实微信或付费模型。B1 离线完成，真实登录与现场 Ctrl-C 保持 B7 未执行。
+- B2 in_progress：inbox/绑定/关联补偿原型已在 B1 集成测试中落地；继续运行时工具守卫、恢复及控制命令，不能仅因89测试通过就宣称后续阶段完成。
+
+## B1 集成依赖：持久接收原型（B2 尚未完成）
+
+- 新增 documents.ts / inbox.ts：versioned ChannelState、原子 inbox/cursor/context、账号身份前置、ID 去重/内容冲突拒绝、背压整批回滚、单独有界脱敏拒绝日志，去重回执不清空。
+- 新增 conversations.ts：单账号 reserved root 可恢复绑定协议、稳定 requestId 的 submit→association 崩溃窗口补偿。保留数值品牌 ConversationId/SubmissionId，首次误设 string 导致 TS2352/TS2322，已改真实类型。
+- inbox 专项 4/4、typecheck/diff --check 通过：重开持久、相同文本不同 ID 不合并、批量容量 rollback、拒绝身份/缺 ID/冲突与提交关联补偿。尚非真实硬杀入站闭环，也未接预算/控制命令/outbox，不将 B2 标完成。
+- 探索误读 src/assistant/documents.ts 得 ENOENT（旧文档定义在 store.ts）；改用实际目录/API 类型定位。CLI start 仍 fail-closed，继续接运行入口与必要工具守卫。
+
+## B1 补齐边界：limits 与媒体协议
+
+- config.ts 接入全部冻结 limits 默认值与严格数字/字段校验；单会话并发固定 1，shell 尚未支持必须拒绝。首次 typecheck 发现 Object.freeze 映射 readonly 导致 TS2540，已用 -readonly 修正；配置专项 4/4 与 typecheck 通过。限制只解析，尚不等于后续模块已全部执行。
+- 新增 channel/cdn.ts 固定 CDN origin、无重定向、编码参数、有界下载/上传；api.ts 增媒体上传 metadata 请求，仅图片/文件，忽略服务器任意 upload_full_url。CDN/媒体 metadata 3/3、typecheck/diff --check 通过；媒体解密、工作区与 durable 发送在 B5。
+- B1 未标完成：CLI start 必须接 B2 durable admission 才能安全启用，不允许临时内存队列丢消息。继续持久接收模块作为集成依赖，再审计 B1 全阶段门槛；没有决策阻塞，不请求新的开发授权。
+
+## B1 本轮继续：凭据、QR、轮询与 CLI 骨架
+
+- 新增 credentials.ts：独立 SQLite 凭据库，事务替换和拒绝隐式账号切换；没有复制旧凭据或文件删除。明文存储，chmod 不等于 Windows ACL/加密保证。
+- 新增 login.ts：取消/超时、QR 过期/重定向/错误身份拒绝。凭据验证完整后才返回保存。
+- 新增 poll-loop.ts：有界指数退避、会话过期停机、由 admission 原子管理 cursor；入库错误直接停止，不与网络错误混用。
+- 新增 config.ts/main.ts 及 npm wechat-assistant 入口：项目根默认路径、配置相对路径、显式真实微信与旧端停用确认、状态/诊断与登录流程。start/backup/migrate 当前明确拒绝而非假装可用；需后续集成，不是完整 daemon。
+- 已通过 typecheck；credentials/login 4 项、poll-loop 3 项、config/CLI 3 项离线测试通过。跨进程账号锁硬杀测试刚补，尚待执行；没有真实网络或全局设置变更。
+- B1 仍 in_progress，媒体协议与可运行启动/停止集成未完成，未阶段提交。CLI config 当前尚未接 limits，后续必须按冻结规格补齐。
+- 全量 npm test 首次超过工具 180 秒被终止：已输出测试无失败，但不能视为全量通过；调整工具时间预算重新执行。跨进程账号锁硬杀专项本次已通过。重跑全量 76/76、typecheck/diff --check 通过（159.9 秒）。
+- 随后新增 lifecycle.ts 注入式通道生命周期：关闭先排空 admission/关闭 runtime，再释放账号锁；ownership 未确认拒绝拉取，关闭出错仍释放锁。生命周期/轮询专项 7/7、typecheck/diff --check 通过；这 4 项新增测试尚未全量重跑。
+- 修复自审发现的轮询错误吞没：宽 catch 在 signal.aborted 时会吞 concurrent admission 失败，改为仅网络/退避边界处理取消；新增并发关闭+入库失败回归。根因为取消处理范围过宽，非 durable API 问题。已检查项目无 AGENTS.md，现有计划已要求入库失败不推进游标，暂不新增全局规则；使用专项回归和流程技能防复发。
+
+## B1 继续：身份守卫与新端账号锁
+
+- 新增 channel/identity.ts：凭据非空/格式与 origin 校验；sender/user/account/type 守卫，须在媒体/模型/入库前调用。
+- 新增 channel/account-lock.ts：默认锁位于同 OS 用户的 ~/.pi-durable/wechat-account-locks，按 accountId hash 定位 SQLite EXCLUSIVE，独立于业务 dataDir，无删除/锁年龄抢占。旧插件不遵守此锁，不承诺跨旧端互斥。
+- identity-lock 3/3 加 protocol 6/6 共 9/9，通过 typecheck 与 diff --check；本次账号锁测试是同进程两连接，跨进程/硬杀专项待补，不能声称已全部验证。
+- B1 仍 in_progress，尚无阶段提交：凭据持久存储、配置/CLI、登录生命周期、重连/优雅关闭与完整锁故障测试未完成。未操作旧插件或登录真实微信。
+
+## 账号锁决策已解决：方案 A
+
+- 用户明确选择 A。新助手独占账号，正式切换前停止旧插件并禁用自动启动，不修改旧插件代码。
+- 开发阻塞解除，继续 B1 离线实现；选择方案不等于现在获准登录、停未知进程或修改全局设置。
+- 新端共享账号锁须独立于业务数据目录；旧端不遵守新锁，生产启动仍须显式切换确认并检查旧端状态，不能声称检测即消除竞态。
+
+## Loop tick：重新核对，仍等待账号锁决策
+
+- 本次已读取 task_plan.md 与 progress.md，并以明确 PLAN_ID/PWF_PLAN_ROOT 运行 check-complete.sh：1/8 complete，1 in_progress，6 pending。
+- 自上次记录后未完成新阶段；B0 提交为 9f9748a，B1 协议代码保留未提交，不能将 B1 标 complete。
+- 决策尚未收到：新助手独占账号并停止/禁用旧插件，或授权改造旧端共享原子锁。续跑提醒不等同于选择或全局配置授权。
+- 未连接微信、未修改全局插件/凭据、未新增测试或代码提交。生产切换保持阻塞；等待用户实际选择后继续。
+
 ## 最新授权与 B1 账号锁决策门槛
 
 - 用户要求除非需要决策/重大问题，持续推进，每完成一个 phase 验证后提交一次。本轮先提交已完成 B0，B1 工作保留未完成状态。

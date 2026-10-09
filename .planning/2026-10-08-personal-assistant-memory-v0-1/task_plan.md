@@ -17,11 +17,11 @@ PLAN_ID: 2026-10-08-personal-assistant-memory-v0-1
 
 ## Current Phase
 
-新路线：B0 complete，B1 in_progress，B2–B7 pending；B0 已实现独占 Harness 工厂并通过离线硬杀恢复验证。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
+新路线：B0–B1 complete，B2 in_progress，B3–B7 pending；B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
 
 ## Next Step
 
-B1 账号锁方案需要决策：旧插件非原子 read/write 锁无法保证与新端互斥。等待选择停止/禁用旧插件自动启动并让新端独占，或授权改造旧端共享原子锁协议。协议层 fake transport 已通过，不登录真实微信。
+继续 B2：接线 Harness/模型/必要工具守卫、自动恢复及确定性控制命令；持久 inbox 与绑定原型已有测试。用户已选择方案 A，正式切换前停止旧插件并禁用自动启动；真实连接仍需授权。
 
 ## Scope 与完成定义
 
@@ -156,16 +156,16 @@ B0–B4 可形成文字内测里程碑；**不能据此声称完整交付**。�
 
 ### Phase B1: 微信传输移植与独立生命周期
 - [x] MIT 许可副本/来源 SHA-256 清单；types 与基础 poll/send/QR 协议移植，transport 注入及 6 项离线契约测试通过。
-- [ ] 凭据/账号锁/游标接口与媒体协议；去除 pi 宿主及直接删除依赖。
-- [ ] 本地 QR 登录、配置、状态与启动/停止；账号互斥、到期凭据、重连退避、脱敏。
-- [ ] 基础协议 fake transport 6/6 通过；生命周期/身份/锁契约测试待补，真实登录只在用户授权后进行。
-- **Status:** in_progress
+- [x] 凭据 SQLite 事务存储、新端跨进程账号锁/硬杀释放、游标接口与媒体 CDN 协议；无 pi 宿主及直接删除依赖。
+- [x] 本地 QR 登录、配置、状态与 receive-only 启动/停止；账号互斥、凭据到期、重连退避、脱敏。完整 agent 入口在 B2–B4，Windows 真实 Ctrl-C 在 B7。
+- [x] 协议/凭据/身份/跨进程锁/生命周期/receiver 离线契约测试通过；全量 89/89、typecheck 与 diff --check 通过。真实登录尚未授权，列 B7 未执行，不作为本阶段离线通过证据。
+- **Status:** complete
 
 ### Phase B2: 持久 inbox 与会话运行时
 - [ ] inbox/cursor/context 原子接收、稳定去重、绑定会话、FIFO 和背压。
 - [ ] Harness/模型/Registry 接线、启动必需能力守卫、自动 resume 与 submission 关联补偿。
 - [ ] 状态/取消/新会话/压缩命令绕过模型自由解读，身份同样校验。
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase B3: 待办与独立长期记忆
 - [ ] 待办工具复用领域事务与幂等回执，不依赖旧服务。
