@@ -2,7 +2,9 @@
 
 ## 当前状态
 
-**N01–N20、W01–W08 均未执行，新实现尚未开始。** 本轮只更新计划并检查文档。
+**B0 已实施，4 项离线恢复实验通过；N01/N02/N06/N10 有部分底层证据，但应用绑定/补偿/账号锁等完整验收尚未完成，不能标整项通过。N01–N20 均未完整验收；W01–W08 未执行。**
+
+B0 证据：`tests/wechat-assistant/recovery.test.ts`，硬杀模型与 safe/unsafe 工具后重开、同 root/requestId/provider identity、已提交答案重读、Harness 存储独占。串行全套 56/56、typecheck 通过；真实微信未连接。规格见 `../../docs/wechat-assistant-spec.md`。
 
 旧版 V01–V16 / 52 tests 的历史报告见 `legacy-verification.md`。旧微信验收以 `progress.md` 取证为准：M01 pass，M02 原 pass 撤回，M03–M05 未完成。它们均不能替代新路线验收。
 

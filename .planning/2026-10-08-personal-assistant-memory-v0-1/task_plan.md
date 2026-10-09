@@ -11,17 +11,17 @@ PLAN_ID: 2026-10-08-personal-assistant-memory-v0-1
 
 ## Approval Gate
 
-本轮授权是更新计划，**不是开始实现**。架构方向已按用户要求确定；下列范围、契约和阶段作为待确认的实施方案。不得把旧版实施授权、旧微信验收授权自动扩展到本轮。
+用户已明确授权“提交后开始实施”。迁移基线已提交为 `8cf4c1a`，允许本地实施 B0–B6。真实微信登录/发送、付费模型、正式数据迁移及全局设置仍需对应授权；不自动推送远端。
 
-旧实现不删除、不覆盖真实数据、不修改全局 pi 设置、不启动/抢占微信连接、不调用付费模型、不自动 commit。未获委派授权，默认单一主模型实施。
+旧实现不删除、不覆盖真实数据、不修改全局 pi 设置、不启动/抢占微信连接、不调用付费模型；用户现已授权每完成阶段并验证后本地 commit，不推送。未获委派授权，默认单一主模型实施。
 
 ## Current Phase
 
-新路线：规划已更新，B0–B7 全部 pending。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
+新路线：B0 complete，B1 in_progress，B2–B7 pending；B0 已实现独占 Harness 工厂并通过离线硬杀恢复验证。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
 
 ## Next Step
 
-等待用户确认本计划并明确“开始实施”，然后从 B0 的离线最小验证开始。
+B1 账号锁方案需要决策：旧插件非原子 read/write 锁无法保证与新端互斥。等待选择停止/禁用旧插件自动启动并让新端独占，或授权改造旧端共享原子锁协议。协议层 fake transport 已通过，不登录真实微信。
 
 ## Scope 与完成定义
 
@@ -147,18 +147,19 @@ B0–B4 可形成文字内测里程碑；**不能据此声称完整交付**。�
 ## Phases
 
 ### Phase B0: 固定规格与 durable 可行性验证
-- [ ] 完整读实际版本 README/类型/相关示例；记录精确版本与 Node 支持范围。
-- [ ] faux provider + SQLite：同会话重开、requestId、resume、safe/unsafe 工具、答案补扫最小实验。
-- [ ] 固定 schema、状态转换、队列/附件/运行预算阈值、CLI 命令和配置；明确 token/账号锁/远端幂等未知项。
-- [ ] 提取独占 Storage 的设计，验证 Harness 单持有者，不复用活 Session。
-- **Status:** pending
+- [x] 完整读实际版本 README/类型/相关示例；chord/pi-ai/pi-durable 1.1.0；本机 Node v24.14.1。最低支持版本仍需 B6 验证。
+- [x] faux provider + SQLite：同会话重开、requestId、resume、safe/unsafe 工具、已提交答案重读最小实验。
+- [x] 固定 schema、状态转换、队列/附件/运行预算阈值、CLI 命令和配置；详见 ../../docs/wechat-assistant-spec.md。token/账号锁/远端幂等仍列未知，不视作已验证。
+- [x] 提取独占 Storage 工厂并交给 Harness 单持有者；第二进程拒绝与硬杀后释放通过。
+- **Status:** complete
 - 门槛：核心恢复语义不成立时报告，不退回 pi 主助手或内存队列。
 
 ### Phase B1: 微信传输移植与独立生命周期
-- [ ] 许可/来源清单；移植协议层，重写凭据/锁/游标接口，去除 pi 宿主与直接删除依赖。
+- [x] MIT 许可副本/来源 SHA-256 清单；types 与基础 poll/send/QR 协议移植，transport 注入及 6 项离线契约测试通过。
+- [ ] 凭据/账号锁/游标接口与媒体协议；去除 pi 宿主及直接删除依赖。
 - [ ] 本地 QR 登录、配置、状态与启动/停止；账号互斥、到期凭据、重连退避、脱敏。
-- [ ] fake transport 契约测试先完成；真实登录只在用户授权后进行。
-- **Status:** pending
+- [ ] 基础协议 fake transport 6/6 通过；生命周期/身份/锁契约测试待补，真实登录只在用户授权后进行。
+- **Status:** in_progress
 
 ### Phase B2: 持久 inbox 与会话运行时
 - [ ] inbox/cursor/context 原子接收、稳定去重、绑定会话、FIFO 和背压。
@@ -213,4 +214,6 @@ B0–B4 可形成文字内测里程碑；**不能据此声称完整交付**。�
 
 ## Errors Encountered
 
-本轮规划工具无执行错误。已识别的历史证据矛盾（M02 撤回、旧顶部状态过时、库独占归属误述）已在当前计划/进度/交接中纠正，原记录仅作为历史保留。
+B1 错误与处理：Node strip-only 不支持 parameter properties，改为显式字段；sendMessage 同步校验抛错与 Promise API 不一致，改为 async；修正后协议 6/6/typecheck 通过。
+
+B0 错误与处理：fixture 导入路径/TaskId 类型错误已修正；faux toolCall 默认 stopReason=stop，须显式 toolUse，否则只形成普通答案；首次并行全量 55/56，旧锁测试因启动耗时超 5 秒失败，串行重跑 56/56 并固定 npm test concurrency=1，未放宽锁断言。已识别的历史证据矛盾（M02 撤回、旧顶部状态过时、库独占归属误述）已在当前计划/进度/交接中纠正，原记录仅作为历史保留。

@@ -1,6 +1,34 @@
 # Progress Log
 
-## 当前状态：路线 B 重新规划，等待实施确认
+## 最新授权与 B1 账号锁决策门槛
+
+- 用户要求除非需要决策/重大问题，持续推进，每完成一个 phase 验证后提交一次。本轮先提交已完成 B0，B1 工作保留未完成状态。
+- 完整阅读上游 src/auth.ts：session.lock 使用 read → process.kill(pid,0) → writeFile，非原子获取；同账户只以全局单 lock 文件协调，无账户维度。旧插件可在检查后覆盖另一进程刚写的锁。仅新端采用 wx 或 SQLite 锁无法让旧插件遵守互斥。
+- 因此不能证明与未修改旧插件的无竞态协调。按当前计划无人值守切换必须暂停，不能声称不同状态目录/探测旧 PID 就安全。
+- 需要用户选择：推荐先明确停止并禁用旧插件自动启动，启用新助手独占账号（不自动修改全局设置）；或授权修改旧插件使双方共享原子账号锁协议。新端独占锁可继续离线实现，但生产接线不得跳过该门槛。
+- 本轮未修改全局插件/锁/凭据，也未启动真实微信。
+
+## 历史实施状态：B1 协议层已实现，生命周期未完成
+
+- 新增 channel/api.ts/types.ts、THIRD_PARTY_NOTICES.md、licenses/pi-wechat-assistant-MIT.txt；上游 API/types/LICENSE 的 SHA-256 已记录，未修改全局插件。
+- 支持基础 poll/send/QR，注入 fetch transport，无 cursor/seen 持久化副作用；caller 固定 client ID；不自动重试；HTTPS 固定 origin、拒绝重定向；GET/POST 取消与超时；响应流上限、错误信息脱敏、errcode-only 失效分类。
+- 协议 6/6 与 typecheck 通过，git diff --check 无报错。全量 56/56 是上一轮 B0 证据，本轮未重跑全量。
+- 实际 Node 执行发现 parameter property 不受 strip-only 支持，改为显式字段；sendMessage 同步抛错修正为 async Promise 拒绝。防复发：需真实 Node 测试而非只信 tsc；不改全局 AGENTS.md，项目运行范式与回归测试已覆盖。
+- B1 保持 in_progress：凭据、身份/账号锁、配置 CLI、退避/优雅关闭、媒体协议未完成；未连接真实微信/模型，未新增提交。
+- 下一动作：凭据存储和账号锁协调，fake transport 生命周期测试。
+
+## 历史实施状态：基线提交，B0 完成
+
+- 用户授权“提交后开始实施”；基线 `8cf4c1a` 已提交，提交前 52/52 和 typecheck 通过。未推送远端。
+- 已提取 src/assistant/storage.ts 的 openExclusiveAssistantStorage，新增 src/wechat-assistant/runtime.ts；只有 Harness 拥有新运行时 Session。
+- 新增 tests/wechat-assistant/recovery.test.ts 与子进程 fixture：4/4 通过；硬杀模型/工具，requestId/root/provider identity 保留，safe 效果仅一次，unsafe 外部效果不重放且 interrupted，答案重开不生成新条目；第二 Harness 拒绝并在硬杀后释放。
+- docs/wechat-assistant-spec.md 固定配置/CLI/schema/容量预算规格；限制尚需 B1–B5 实现，未声称已生效。
+- 首次并行全套 55/56：旧锁测试启动耗时 5790ms 超阈值；改为串行执行全套 56/56，typecheck 通过。npm test 固定 concurrency=1，不放宽锁断言。Node v24.14.1，依赖三个包均 1.1.0。
+- fixture 初版路径错误、TaskId 数字/字符串不匹配与 faux stopReason 漏设已修正；诊断产物只在 data/test-runs/ 保留，无直接删除。
+- 防复发：faux 工具调用须显式 toolUse；进程计时测试串行，避免把主机争用误判锁行为。未改全局 AGENTS.md，原因是项目特定 API/测试执行问题，已写测试与执行脚本。
+- 下一动作 B1：许可/来源 hash 与 fake transport 协议移植；未调用真实微信/付费模型、未迁移正式数据。B0 新改动尚未提交。
+
+## 历史状态：路线 B 重新规划，等待实施确认
 
 - 用户最新要求以 pi-durable 为唯一运行时完整开发，允许移植微信插件。本轮仅更新计划，未开始业务实现。
 - 当前权威文件：`task_plan.md`（B0–B7）、`verification.md`（N01–N20 / W01–W08）、`handoff.md`。所有新阶段 pending、所有新验收未执行。

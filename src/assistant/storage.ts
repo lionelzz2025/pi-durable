@@ -99,10 +99,10 @@ export type OpenAssistantStoreOptions = {
  * it is held. Throws {@link AssistantDatabaseBusyError} when another process owns
  * the file.
  */
-export const openAssistantStore = async (
+export const openExclusiveAssistantStorage = async (
 	databasePath: string,
 	options: OpenAssistantStoreOptions = {},
-): Promise<AssistantStore> => {
+): Promise<Storage> => {
 	const context = options.context ?? BACKGROUND_CONTEXT;
 
 	let database;
@@ -124,18 +124,26 @@ export const openAssistantStore = async (
 		throw isBusyError(error) ? new AssistantDatabaseBusyError(databasePath, { cause: error }) : error;
 	}
 
-	const session = createSession(storage);
-
 	try {
 		// First transaction of the connection: this is where WAL+EXCLUSIVE takes and
 		// keeps the file locks. Without it, a competing process could still slip in
 		// until our first business write.
 		await storage.scanDocuments({ scope: { kind: "session" }, at: "current" }, 1, undefined, context);
 	} catch (error) {
-		await session.close(context).catch(() => undefined);
+		await storage.close(context).catch(() => undefined);
 		throw isBusyError(error) ? new AssistantDatabaseBusyError(databasePath, { cause: error }) : error;
 	}
+	return storage;
+};
 
+/** Legacy Session wrapper. New runtimes give the exclusive Storage to Harness.open. */
+export const openAssistantStore = async (
+	databasePath: string,
+	options: OpenAssistantStoreOptions = {},
+): Promise<AssistantStore> => {
+	const context = options.context ?? BACKGROUND_CONTEXT;
+	const storage = await openExclusiveAssistantStorage(databasePath, options);
+	const session = createSession(storage);
 	let closed = false;
 	return {
 		databasePath,
