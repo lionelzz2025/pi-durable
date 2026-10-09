@@ -297,3 +297,12 @@ export class WeixinClient {
 - Draft 类型：`node_modules/@earendil-works/chord/dist/delta/draft.ts:2`
 - 脚本化模型：`node_modules/@earendil-works/pi-ai/dist/providers/faux.d.ts`
 - 项目内既有范式：`examples/03-crash-resume.ts`、`examples/04-coding-tools.ts`、`examples/05-real-model.ts`
+
+## B3 有意偏离契约（不是缺陷）
+
+- 记忆记录新增 `operationId` 字段：契约只列 id/content/source/createdAt/updatedAt/active，
+  但 `memory_add` 需要以工具调用 id 为幂等键才能在崩溃重放后不重复写入，故加该字段（不影响“逻辑遗忘保留审计”语义）。
+- 新增 `assistant.todo-index`（kind=`assistant.todo-index`）会话文档：`DocumentReader` 仅提供点读（`snapshot`），
+  无 `scanDocuments`，工具内无法枚举待办，故用创建顺序 id 索引支撑 `todo_list`；上限 5000，达上限阻止新增而非淘汰。
+  B6 迁移导入旧待办时需按创建时间重建该索引。
+- 记忆容量上限 500 条同样“到顶阻止”而非静默淘汰，与契约“达到容量保留并阻止新增”一致。

@@ -1,5 +1,17 @@
 # Progress Log
 
+## B3 完成：待办工具与独立长期记忆
+
+三条 B3 范围项均已有实现与测试证据，标记 complete。全量 `npm test` 104/104、`npm run typecheck` 通过。
+
+- 待办工具（`tools/todo.ts`）：`todo_create/list/get/complete`，复用旧库 `assistant.todo`/`assistant.receipt` 文档族与归一化规则；每次变更与幂等回执同事务，重放以 `api.callId` 为键不重复；新增 `assistant.todo-index` 会话文档（上限 5000）支撑列表分页。不依赖旧 HTTP 服务。
+- 独立记忆（`memory.ts`/`tools/memory.ts`）：`memory_add/search/correct/forget`，单文档有界存储（上限 500），逻辑遗忘保留 `active:false`。
+- 有界提示注入（`memory-prompt.ts`）：按 `memoryPromptBytes` 预算整条省略，不截断单个事实；预算不足一条时不注入。
+- 扩展接线（`extension.ts`）：`assistantExtension({ memoryPromptBytes })` 一次提供 8 个必需工具 + 1 个提示片段，自身即可通过能力守卫，不依赖全局 pi 工具。
+- 测试：`tools.test.ts`(6) 幂等/分页/CRUD/遗忘/预算/重启回执；`memory-persistence.test.ts`(1) 跨新会话(reset)/真实 `compact()`/进程重开仍注入；`capabilities.test.ts` 新增扩展自满足守卫。
+- 收尾审计：三条 bullet 逐条映射到文件与测试；容量边界已实现并在 spec 记录；新增 `assistant.todo-index` 与 memory `operationId` 字段属有意偏离，已入 spec/findings。
+- N08/N09 的离线部分有证据；N08 的“并发/崩溃后不重复业务效果”以 commit 原子性 + 重放回执覆盖，剩余端到端在 B4 补足。
+
 ## B2 继续：控制命令、运行时工厂及结算补扫
 
 - 新增 agent-runtime.ts：必要工具校验先于存储/调度，绑定→补扫结算→投递→resume。真实 provider/CLI 仍未接，不伪装模型可用。

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { REQUIRED_TOOLS, requireAssistantCapabilities } from "../../src/wechat-assistant/capabilities.ts";
+import { assistantExtension } from "../../src/wechat-assistant/extension.ts";
 const tool = (name: string) => defineTool({ name, description: "fixture", parameters: Type.Object({}), replay: "safe", execute: async () => ({ content: [{ type: "text" as const, text: "fixture" }] }) });
 test("capability guard rejects missing tools and accepts the explicit complete registry", () => {
   const registry = createRegistry();
@@ -11,4 +12,12 @@ test("capability guard rejects missing tools and accepts the explicit complete r
   assert.doesNotThrow(() => requireAssistantCapabilities(registry));
   registry.install(defineExtension({ name: "duplicate", tools: [tool("memory_add")] }));
   assert.throws(() => requireAssistantCapabilities(registry), /memory_add/);
+});
+test("the built-in assistant extension alone satisfies the capability guard", () => {
+  const registry = createRegistry();
+  registry.install(assistantExtension({ memoryPromptBytes: 8192 }));
+  assert.doesNotThrow(() => requireAssistantCapabilities(registry));
+  const names = registry.snapshot().tools().map(({ tool: item }) => item.name);
+  assert.deepEqual([...names].sort(), [...REQUIRED_TOOLS].sort());
+  assert.equal(registry.snapshot().sections().length, 1);
 });

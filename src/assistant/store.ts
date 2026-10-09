@@ -61,7 +61,7 @@ export type Todo = {
 };
 
 /** The mutable value stored in the document; the tracker mutates this inside a commit. */
-type TodoRecord = {
+export type TodoRecord = {
 	id: string;
 	title: string;
 	status: TodoStatus;
@@ -69,7 +69,7 @@ type TodoRecord = {
 	completedAt: string | null;
 };
 
-type TodoSeed = {
+export type TodoSeed = {
 	readonly id: string;
 	readonly title: string;
 	readonly createdAt: string;
@@ -81,14 +81,15 @@ type TodoSeed = {
  * The seed is the complete final record, so the document is never observed in a
  * partially written state.
  */
-type ReceiptRecord = {
+export type ReceiptRecord = {
 	operationId: string;
 	fingerprint: string;
 	requestKind: string;
 	todo: TodoRecord;
 };
 
-const TodoDoc = defineDocFamily<TodoRecord, TodoSeed>({
+/** Exported so the durable Harness tools reuse the same on-disk todo/receipt identity. */
+export const TodoDoc = defineDocFamily<TodoRecord, TodoSeed>({
 	kind: ASSISTANT_TODO_KIND,
 	version: 1,
 	scope: "session",
@@ -102,7 +103,7 @@ const TodoDoc = defineDocFamily<TodoRecord, TodoSeed>({
 	}),
 });
 
-const ReceiptDoc = defineDocFamily<ReceiptRecord, ReceiptRecord>({
+export const ReceiptDoc = defineDocFamily<ReceiptRecord, ReceiptRecord>({
 	kind: ASSISTANT_RECEIPT_KIND,
 	version: 1,
 	scope: "session",
@@ -321,7 +322,7 @@ export type TodoService = {
 	readonly pendingMutations: () => number;
 };
 
-const toTodo = (record: Readonly<TodoRecord>): Todo => ({
+export const toTodo = (record: Readonly<TodoRecord>): Todo => ({
 	id: record.id,
 	title: record.title,
 	status: record.status,

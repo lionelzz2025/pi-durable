@@ -8,7 +8,9 @@
 
 配置：项目根定位 `data/wechat-assistant/config.json`，显式绝对 `--config` 可覆盖；路径相对配置文件解析。字段为 schemaVersion=1、dataDir、workspaceDir、accountId、boundUserId、model.provider、model.modelId、limits、shell.enabled=false。凭据单独存储，不把密钥写入配置/日志。生产模型使用既有 provider 接线；不得隐式回退 faux 或全局 pi 工具。
 
-## 默认边界（后续必须实现并测试，当前不是已生效限制）
+## 默认边界（部分已生效；未标注项待后续阶段实现并测试）
+
+已生效：`messageBytes`/`inboxPending`（B2 接收背压）、`memoryPromptBytes`（B3 提示注入预算，超预算按整条省略并提示剩余条数，不截断单个事实）。其余项尚未生效。
 
 | 配置 | 默认 | 超限行为 |
 |---|---:|---|
@@ -36,7 +38,8 @@
 - Inbox：稳定键 hash(accountId/userId/messageId 的 JSON 数组)、payloadHash、payload、receivedAt、requestId、submissionId；状态 received/submitted/settled/quarantined。同 ID 不同 hash 隔离，不用随机 ID 补缺失 ID。
 - PollState：cursor、各 binding 的 context token；与同批 inbox 原子提交。
 - Outbox：逻辑 answer/分片唯一键、payloadHash、接收者、冻结媒体引用、attempts、nextAttemptAt、lastError；pending/sending/sent/blocked/outcome_unknown。未知结果不自动重发。
-- Memory：id、content、source、createdAt、updatedAt、active；逻辑遗忘保留审计提醒。
+- Memory：id、content、source、createdAt、updatedAt、active；逻辑遗忘保留审计提醒。实现新增 `operationId` 字段：`memory_add` 以工具调用 id 为幂等键，重放不重复存储；容量上限 500 条，新增到上限时阻止而不是静默淘汰。
+- Todo：复用旧库 `assistant.todo`/`assistant.receipt` 文档族与归一化规则，但由 Harness 工具写入；新增 `assistant.todo-index` 会话文档维护创建顺序索引（上限 5000），因为 `DocumentReader` 只提供点读、无扫描，`todo_list` 依赖该索引。索引可由 B6 迁移重建。
 - Reminder：id、dueAt、timezone、occurrenceId、outboxId；pending/dispatched/cancelled/blocked。
 - Approval：id、参数 hash、workspace、expiresAt；pending/approved/consumed/expired/rejected。shell 默认关闭。
 
@@ -45,5 +48,7 @@ Documents 不承担无限数据规模：达到容量保留并阻止新增；B6 �
 ## 已验证与未知
 
 `tests/wechat-assistant/recovery.test.ts` 用 faux provider + 隔离 SQLite + 真实子进程硬杀，证明 model retry、相同 root/requestId、已提交答案重读、provider identity 保留、幂等 safe 工具重放、unsafe 工具 interrupted 且外部标记不重做，以及数据库第二 Harness 拒绝/硬杀后释放。此处 safe 指测试工具通过 taskId 事务去重，不代表任意工具都安全。
+
+B3 证据：`tests/wechat-assistant/tools.test.ts` 证明待办 create/list/get/complete 的幂等回执（同 callId 重放不重复、异内容冲突）、分页不重不漏、记忆新增/检索/更正/遗忘、遗忘后不再检索、`memory_add` 重放幂等、提示注入按预算整条省略且超小预算不注入碎片、以及重启后回执/记忆仍在。`tests/wechat-assistant/memory-persistence.test.ts` 证明记忆跨新会话（reset）、真实压缩任务和进程重开仍被注入。
 
 仅 B0 可行性证据，不是 inbox/outbox/微信闭环测试。账号锁与旧插件协调、context token 有效期、发送 client ID 是否远端去重仍未知，分别在 B1/B4/真实微信验收证明；未知时不得无人值守切换或盲重发。
