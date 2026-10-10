@@ -17,11 +17,12 @@ test("config paths resolve relative to config, default is project anchored", asy
   assert.equal(DEFAULT_CONFIG, resolve(PROJECT_ROOT, "data/wechat-assistant/config.json"));
   assert.deepEqual(config.shell, { enabled: false });
 });
-test("invalid schema, credentials in config and premature shell enable fail closed", async () => {
-  for (const patch of [{ schemaVersion: 2 }, { token: "secret" }, { shell: { enabled: true } }, { boundUserId: "" }]) {
+test("invalid schema and credential-bearing config fail closed; shell flag is explicit", async () => {
+  for (const patch of [{ schemaVersion: 2 }, { token: "secret" }, { boundUserId: "" }]) {
     await assert.rejects(loadWechatConfig(await file({ ...value, ...patch })));
   }
   await assert.rejects(loadWechatConfig("relative.json"));
+  assert.deepEqual((await loadWechatConfig(await file({ ...value, shell: { enabled: true } }))).shell, { enabled: true });
 });
 test("limits use frozen defaults and reject inherited keys and invalid budgets", async () => {
   const config = await loadWechatConfig(await file({ ...value, limits: { modelRetries: 0, dailyCostUsd: 0.5 } }));
@@ -31,9 +32,16 @@ test("limits use frozen defaults and reject inherited keys and invalid budgets",
     await assert.rejects(loadWechatConfig(await file({ ...value, limits })));
   }
 });
-test("CLI refuses unauthorized login and unimplemented start without network", async () => {
+test("approval cannot open a second owner through the CLI", async () => {
+  const path = await file({ ...value, shell: { enabled: true } });
+  await assert.rejects(runWechatCli(["approvals", "--config", path]), /Usage/);
+});
+test("CLI refuses unauthorized login and agent start without model authorization", async () => {
   const path = await file(value);
   await assert.rejects(runWechatCli(["login", "--config", path]), /requires/);
-  await assert.rejects(runWechatCli(["start", "--config", path, "--allow-wechat", "--legacy-stopped"]), /not available/);
+  await assert.rejects(runWechatCli(["start", "--config", path, "--allow-wechat", "--legacy-stopped"]), /allow-model/);
+  await assert.rejects(runWechatCli(["start", "--config", path, "--allow-model"]), /requires --allow-wechat/);
+  const unsupported = await file({ ...value, model: { provider: "unknown", modelId: "missing" } });
+  await assert.rejects(runWechatCli(["start", "--config", unsupported, "--allow-wechat", "--legacy-stopped", "--allow-model"]), /Login credentials required/);
   await assert.rejects(runWechatCli(["doctor", "--config", path, "--unknown"]), /Unknown/);
 });

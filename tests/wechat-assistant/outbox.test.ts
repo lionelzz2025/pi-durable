@@ -32,7 +32,7 @@ const open = async (answer: string) => {
   faux.setResponses(Array.from({ length: 30 }, () => fauxAssistantMessage(answer)));
   models.setProvider(faux.provider);
   const registry = createRegistry();
-  registry.install(assistantExtension({ memoryPromptBytes: 8192 }));
+  registry.install(assistantExtension({ memoryPromptBytes: 8192, workspace: { root: dir, maxBytes: 1024 * 1024 }, harness: { snapshot: async () => undefined, commit: async () => undefined } as never, boundUserId: binding.userId }));
   const options = { models, registry };
   const harness = await openAssistantRuntime(db, options, binding);
   return { harness, db, options };
@@ -173,6 +173,28 @@ test("a record left sending by a crash is recovered as outcome_unknown, never re
   } finally {
     await harness.close(context);
   }
+});
+
+test("bound context is read atomically for each chunk, including token rotation", async () => {
+  const { harness } = await open("answer");
+  const sent: OutboundChunk[] = [];
+  try {
+    await answerOne(harness, "question");
+    const { ChannelState } = await import("../../src/wechat-assistant/documents.ts");
+    await harness.commit(async (tx) => {
+      const channel = await tx.doc(ChannelState);
+      channel.contextToken = "first";
+      const record = (await tx.doc(Outbox)).records[0]!;
+      record.chunks = ["part-1", "part-2"];
+      record.clientIds = ["id-1", "id-2"];
+    }, context);
+    const result = await drainOutbox(harness, async (chunk) => {
+      sent.push(chunk);
+      if (sent.length === 1) await harness.commit(async (tx) => { (await tx.doc(ChannelState)).contextToken = "second"; }, context);
+    }, { recipient: binding.userId });
+    assert.equal(result.sent, 1);
+    assert.deepEqual(sent.map((item) => item.contextToken), ["first", "second"]);
+  } finally { await harness.close(context); }
 });
 
 test("missing context token blocks instead of sending, and a refreshed token recovers it", async () => {

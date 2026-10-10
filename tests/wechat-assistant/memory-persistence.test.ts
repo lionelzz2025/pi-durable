@@ -20,7 +20,7 @@ const options = () => {
   faux.setResponses(Array.from({ length: 20 }, () => fauxAssistantMessage("summary")));
   models.setProvider(faux.provider);
   const registry = createRegistry();
-  registry.install(assistantExtension({ memoryPromptBytes: 8192 }));
+  registry.install(assistantExtension({ memoryPromptBytes: 8192, workspace: { root: process.cwd(), maxBytes: 1024 * 1024 }, harness: { snapshot: async () => undefined, commit: async () => undefined } as never, boundUserId: "test-user" }));
   return { models, registry };
 };
 /** Tool api over the Harness itself: memory tools touch only `commit` and `snapshot`. */

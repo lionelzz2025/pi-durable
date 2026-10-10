@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createCipheriv, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import { admitWechatBatch } from "../../src/wechat-assistant/inbox.ts";
 import { ChannelState } from "../../src/wechat-assistant/documents.ts";
 import { reconcileInbox } from "../../src/wechat-assistant/settlement.ts";
 import { submitReceivedInbox } from "../../src/wechat-assistant/conversations.ts";
+import type { WechatCdn } from "../../src/wechat-assistant/channel/cdn.ts";
 
 // Fixture capabilities are not production implementations and never reach CLI.
 const options = () => {
@@ -58,6 +59,29 @@ test("runtime recovers persisted input FIFO and reconciles settled receipts with
   } finally { await reopened.close(context); }
 });
 
+test("startup preserves received media without transport and recovers it with injected CDN", async () => {
+  const dir = resolve("data/test-runs", `agent-media-${randomUUID()}`); await mkdir(dir, { recursive: true });
+  const db = resolve(dir, "assistant.sqlite"); const opts = options();
+  const key = "00112233445566778899aabbccddeeff";
+  const file = { ...batch([]).batch.msgs[0], message_id: "media-1", from_user_id: "user", to_user_id: "bot", context_token: "ctx", message_type: 1, message_state: 2,
+    item_list: [{ type: 4, file_item: { file_name: "startup.txt", len: "12", media: { encrypt_query_param: "safequery012345", aes_key: Buffer.from(key).toString("base64"), encrypt_type: 1 as const } } }] };
+  const raw = await openWechatHarness(db, opts);
+  try { await admitWechatBatch(raw, { ...batch([]), batch: { ret: 0, get_updates_buf: "cursor", msgs: [file] }, attachmentBytes: 1024 }); }
+  finally { await raw.close(context); }
+  await assert.rejects(openAssistantRuntime(db, opts, binding), /media transport unavailable/);
+  const cipher = createCipheriv("aes-128-ecb", Buffer.from(key, "hex"), null);
+  const bytes = Buffer.concat([cipher.update(Buffer.from("startup file")), cipher.final()]);
+  let calls = 0;
+  const cdn = { transfer: async () => { calls++; return { bytes }; } } as unknown as WechatCdn;
+  const harness = await openAssistantRuntime(db, opts, binding, { root: resolve(dir, "media"), maxBytes: 1024, cdn, signal: new AbortController().signal });
+  try {
+    await harness.waitForIdle(context); await reconcileInbox(harness);
+    const state = (await harness.snapshot(ChannelState, context))!;
+    assert.equal(state.inbox[0]?.status, "settled");
+    assert.equal(state.inbox[0]?.media.length, 1);
+    assert.equal(calls, 1);
+  } finally { await harness.close(context); }
+});
 test("inbox controls bypass generation and subsequent input uses the switched conversation", async () => {
   const dir = resolve("data/test-runs", `agent-controls-${randomUUID()}`); await mkdir(dir, { recursive: true });
   const harness = await openAssistantRuntime(resolve(dir, "assistant.sqlite"), options(), binding);

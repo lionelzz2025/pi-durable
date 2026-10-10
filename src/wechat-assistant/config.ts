@@ -46,8 +46,7 @@ export const loadWechatConfig = async (path = DEFAULT_CONFIG): Promise<WechatCon
     }
   }
   if (limits.concurrentConversations !== 1) throw new Error("Only one concurrent conversation is supported");
-  // Until the approval/command layer exists, enabling shell must fail closed.
-  if (shell?.enabled) throw new Error("Shell execution is not available yet");
-  return { schemaVersion: 1, dataDir: resolve(dirname(path), c.dataDir), workspaceDir: resolve(dirname(path), c.workspaceDir),
-    accountId: c.accountId, boundUserId: c.boundUserId, model: { provider: model.provider, modelId: model.modelId }, shell: { enabled: false }, limits };
+  const workspaceDir = resolve(dirname(path), c.workspaceDir);
+  return { schemaVersion: 1, dataDir: resolve(dirname(path), c.dataDir), workspaceDir,
+    accountId: c.accountId, boundUserId: c.boundUserId, model: { provider: model.provider, modelId: model.modelId }, shell: { enabled: shell?.enabled === true }, limits };
 };

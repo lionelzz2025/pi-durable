@@ -6,15 +6,21 @@ import { loginWechat } from "./channel/login.ts";
 import { acquireAccountLock } from "./channel/account-lock.ts";
 import { WechatApi } from "./channel/api.ts";
 import { runPersistentReceiver } from "./receiver.ts";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fasthubProvider } from "../providers/fasthub.ts";
+import { runAssistantDaemon } from "./assistant-daemon.ts";
+import { senderFromApi } from "./sender.ts";
+import { WechatCdn } from "./channel/cdn.ts";
 
 export const runWechatCli = async (args: string[]): Promise<void> => {
   const [command, ...flags] = args;
-  let configPath = DEFAULT_CONFIG; let authorize = false; let exclusive = false; let receiveOnly = false;
+  let configPath = DEFAULT_CONFIG; let authorize = false; let exclusive = false; let receiveOnly = false; let allowModel = false;
   for (let i = 0; i < flags.length; i++) {
     if (flags[i] === "--config" && flags[i + 1]) configPath = flags[++i]!;
     else if (flags[i] === "--allow-wechat") authorize = true;
     else if (flags[i] === "--legacy-stopped") exclusive = true;
     else if (flags[i] === "--receive-only") receiveOnly = true;
+    else if (flags[i] === "--allow-model") allowModel = true;
     else throw new Error("Unknown or incomplete CLI option");
   }
   if (!["login", "start", "status", "doctor", "backup", "migrate"].includes(command ?? "")) {
@@ -28,7 +34,7 @@ export const runWechatCli = async (args: string[]): Promise<void> => {
     console.log(JSON.stringify({ config: "valid", runtime: "not-integrated", shell: "disabled", accountOwnership: "requires legacy shutdown confirmation" }));
     return;
   }
-  if (command === "start" && !receiveOnly) throw new Error("Agent start is not available yet; explicit --receive-only stores inputs without processing or replies");
+  if (command === "start" && !receiveOnly && !allowModel) throw new Error("Agent start requires explicit --allow-model authorization; use --receive-only for inbox capture");
   if ((command === "login" || command === "start") && (!authorize || !exclusive)) throw new Error("Connection requires --allow-wechat and --legacy-stopped; stop and disable the legacy plugin first");
   const release = command === "login" ? await acquireAccountLock(config.accountId) : undefined;
   try {
@@ -46,9 +52,21 @@ export const runWechatCli = async (args: string[]): Promise<void> => {
       try {
         if (command === "start") {
           if (!prior) throw new Error("Login credentials required");
-          console.log("Receive-only: durable inbox enabled; no model processing or replies");
-          await runPersistentReceiver({ config, credentials: prior, legacyStopped: exclusive, signal: controller.signal,
-            onState: (state) => { console.log(JSON.stringify({ channel: state, mode: "receive-only" })); } });
+          if (receiveOnly) {
+            console.log("Receive-only: durable inbox enabled; no model processing or replies");
+            await runPersistentReceiver({ config, credentials: prior, legacyStopped: exclusive, signal: controller.signal,
+              onState: (state) => { console.log(JSON.stringify({ channel: state, mode: "receive-only" })); } });
+          } else {
+            // Only this project-owned provider is wired; never fall back to global pi models.
+            const provider = fasthubProvider();
+            const models = createModels(); models.setProvider(provider);
+            if (!models.getModel(config.model.provider, config.model.modelId)) throw Error("Configured model is unavailable in this standalone runtime");
+            if (!process.env.FH_NOVOSNS_API_KEY) throw Error("Configured model credential unavailable");
+            const api = new WechatApi();
+            await runAssistantDaemon({ config, credentials: prior, harnessOptions: { models }, api, cdn: new WechatCdn(),
+              sender: senderFromApi(api, prior.token), signal: controller.signal, legacyStopped: exclusive,
+              onState: (state) => { console.log(JSON.stringify({ channel: state, mode: "assistant" })); } });
+          }
           return;
         }
         const credentials = await loginWechat({ api: new WechatApi(), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(180_000)]),

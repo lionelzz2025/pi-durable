@@ -3,6 +3,7 @@ export type InboxRecord = {
   key: string; payloadHash: string; payload: string; receivedAt: number;
   requestId: string; submissionId: SubmissionId | null;
   conversationId?: ConversationId;
+  media: { kind: "image" | "file"; name: string; mime: string; bytes: number; sha256: string; path: string }[];
   status: "received" | "submitted" | "settled" | "quarantined";
 };
 export const ChannelState = defineDoc<{

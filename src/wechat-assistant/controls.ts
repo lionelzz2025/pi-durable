@@ -3,9 +3,9 @@ import { AgentDoc, configure, defineDoc, type ConversationId, type Harness, type
 import { ChannelState } from "./documents.ts";
 import { retryOutbox } from "./outbox.ts";
 
-export type Control = "status" | "cancel" | "new" | "compact" | "retry";
+export type Control = "status" | "cancel" | "new" | "compact" | "retry" | "tasks" | "reminders";
 export const parseControl = (text: string): Control | undefined => {
-  const commands: Record<string, Control> = { "/status": "status", "/cancel": "cancel", "/new": "new", "/compact": "compact", "/retry": "retry" };
+  const commands: Record<string, Control> = { "/status": "status", "/cancel": "cancel", "/new": "new", "/compact": "compact", "/retry": "retry", "/tasks": "tasks", "/reminders": "reminders" };
   return Object.hasOwn(commands, text.trim()) ? commands[text.trim()] : undefined;
 };
 type Receipt = { command: Control; conversationId: ConversationId; state: "pending" | "running" | "complete" | "needs_review"; result: string; taskId: TaskId | null };
@@ -65,7 +65,14 @@ export const executeControl = async (harness: Harness, key: string, command: Con
     receipt = { ...receipt, state: "complete", result: `Cancellation completed for conversation ${receipt.conversationId}` };
   } else {
     const inspection = await harness.inspect(context);
-    receipt = { ...receipt, state: "complete", result: JSON.stringify({ conversationId: receipt.conversationId, liveTasks: inspection.tasks.length, unsettledSubmissions: inspection.submissions.length }) };
+    if (receipt.command === "tasks") {
+      receipt = { ...receipt, state: "complete", result: JSON.stringify(inspection.tasks.map((task) => ({ id: task.record.id, kind: task.record.kind, status: task.record.state.status }))) };
+    } else if (receipt.command === "reminders") {
+      const reminders = await import("./reminders.ts");
+      receipt = { ...receipt, state: "complete", result: JSON.stringify(await reminders.listReminders(harness)) };
+    } else {
+      receipt = { ...receipt, state: "complete", result: JSON.stringify({ conversationId: receipt.conversationId, liveTasks: inspection.tasks.length, unsettledSubmissions: inspection.submissions.length }) };
+    }
   }
   await harness.commit(async (tx) => { (await tx.doc(ControlReceipts)).records[key] = receipt; }, context);
   return receipt.result;

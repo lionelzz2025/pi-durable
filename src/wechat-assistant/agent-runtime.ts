@@ -6,12 +6,15 @@ import { openWechatHarness } from "./runtime.ts";
 import { reconcileInbox } from "./settlement.ts";
 import { enqueueAnswers, recoverOutbox } from "./outbox.ts";
 import { ChannelState } from "./documents.ts";
+import { dispatchDueReminders, reconcileReminders } from "./reminders.ts";
+import { recoverMediaOutbox } from "./media-outbox.ts";
+import type { WechatCdn } from "./channel/cdn.ts";
 
 /** No polling before required capabilities have been checked. Provider selection
  * is supplied by the host; this entry never falls back to a global pi instance. */
 export const openAssistantRuntime = async (databasePath: string, options: HarnessOptions, binding: {
   accountId: string; userId: string; model: ModelRef;
-}): Promise<Harness> => {
+}, media?: { root: string; maxBytes: number; cdn: WechatCdn; signal: AbortSignal }): Promise<Harness> => {
   requireAssistantCapabilities(options.registry);
   if (!options.models.getModel(binding.model.provider, binding.model.modelId)) throw Error("Configured assistant model unavailable");
   const harness = await openWechatHarness(databasePath, options);
@@ -30,8 +33,11 @@ export const openAssistantRuntime = async (databasePath: string, options: Harnes
     // A crash may have left a send in flight (unknown) or an answer without an
     // outbox record; recover before admitting new work, then enqueue any answers.
     await recoverOutbox(harness);
+    await recoverMediaOutbox(harness);
     await enqueueAnswers(harness, { recipient: binding.userId });
-    await submitReceivedInbox(harness);
+    await dispatchDueReminders(harness, {});
+    await reconcileReminders(harness);
+    await submitReceivedInbox(harness, media);
     harness.resume();
     return harness;
   } catch (error) {

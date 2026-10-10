@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-**B0 已实施，4 项离线恢复实验通过；N01/N02/N06/N10 有部分底层证据，但应用绑定/补偿/账号锁等完整验收尚未完成，不能标整项通过。N01–N20 均未完整验收；W01–W08 未执行。**
+**B0–B4 已按阶段完成离线实现；B5 在收口验收中，B6/B7 待执行。** B5 的媒体、工作区、审批、任务与提醒已有离线测试，但 N14 的“不支持格式明确回复”已改为 inbox key 去重的 durable outbox 通知并完成假发送测试，真实微信投递尚未验收；N15 的工作区权限依赖受信任本地目录且不是安全沙箱；N16 的真实进程/平台行为仍需核对。N01–N20 不以本文件顶部笼统判定全部通过，逐项证据须以阶段提交和 `progress.md` 为准；W01–W08 均未执行。
 
-B0 证据：`tests/wechat-assistant/recovery.test.ts`，硬杀模型与 safe/unsafe 工具后重开、同 root/requestId/provider identity、已提交答案重读、Harness 存储独占。串行全套 56/56、typecheck 通过；真实微信未连接。规格见 `../../docs/wechat-assistant-spec.md`。
+B0 证据：`tests/wechat-assistant/recovery.test.ts`，硬杀模型与 safe/unsafe 工具后重开、同 root/requestId/provider identity、已提交答案重读、Harness 存储独占。后续 B1–B5 专项及全量离线测试见 `progress.md`；B5 收口后全量 141/141、typecheck、diff --check 通过（离线 fake WeChat/faux model）。真实微信未连接。规格见 `../../docs/wechat-assistant-spec.md`。
 
 旧版 V01–V16 / 52 tests 的历史报告见 `legacy-verification.md`。旧微信验收以 `progress.md` 取证为准：M01 pass，M02 原 pass 撤回，M03–M05 未完成。它们均不能替代新路线验收。
 

@@ -193,8 +193,6 @@ export const drainOutbox = async (harness: Harness, sender: OutboxSender, option
   const now = options.now ?? Date.now;
   const sendAttempts = options.sendAttempts ?? OUTBOX_LIMITS.sendAttempts;
   const result: DrainResult = { sent: 0, retried: 0, blocked: 0, unknown: 0 };
-  const channel = await harness.snapshot(ChannelState, context);
-  const contextToken = channel?.contextToken ?? "";
   const snapshot = await harness.snapshot(Outbox, context);
   for (const candidate of snapshot?.records ?? []) {
     if (candidate.status !== "pending") continue;
@@ -204,34 +202,36 @@ export const drainOutbox = async (harness: Harness, sender: OutboxSender, option
       const claimed = await harness.commit(async (tx) => {
         const target = (await tx.doc(Outbox)).records.find((record) => record.key === candidate.key);
         if (!target || target.status !== "pending" || target.nextAttemptAt > now()) return undefined;
+        const channel = await tx.doc(ChannelState);
+        if (!channel.contextToken || channel.userId !== target.recipient) {
+          target.status = "blocked";
+          target.lastError = "bound context unavailable; wait for a new message";
+          target.updatedAt = now();
+          return { blocked: true as const };
+        }
         target.status = "sending";
         target.updatedAt = now();
         // Deep-copy the mutable arrays: the draft overlay is unusable once settled.
-        return { ...target, chunks: [...target.chunks], clientIds: [...target.clientIds] };
+        return { blocked: false as const, contextToken: channel.contextToken,
+          record: { ...target, chunks: [...target.chunks], clientIds: [...target.clientIds] } };
       }, context);
       if (!claimed) break;
-      const text = claimed.chunks[claimed.chunkIndex];
-      const clientId = claimed.clientIds[claimed.chunkIndex];
+      if (claimed.blocked) { result.blocked += 1; break; }
+      const { record: item, contextToken } = claimed;
+      const text = item.chunks[item.chunkIndex];
+      const clientId = item.clientIds[item.chunkIndex];
       if (text === undefined || clientId === undefined) {
         await harness.commit(async (tx) => {
-          const target = (await tx.doc(Outbox)).records.find((record) => record.key === claimed.key);
+          const target = (await tx.doc(Outbox)).records.find((record) => record.key === item.key);
           if (target) { target.status = "sent"; target.updatedAt = now(); }
         }, context);
         result.sent += 1;
         break;
       }
-      if (contextToken === "") {
-        await harness.commit(async (tx) => {
-          const target = (await tx.doc(Outbox)).records.find((record) => record.key === claimed.key);
-          if (target) { target.status = "blocked"; target.lastError = "no context token; wait for a new message"; target.updatedAt = now(); }
-        }, context);
-        result.blocked += 1;
-        break;
-      }
       try {
-        await sender({ userId: claimed.recipient, contextToken, clientId, text });
+        await sender({ userId: item.recipient, contextToken, clientId, text });
         const last = await harness.commit(async (tx) => {
-          const target = (await tx.doc(Outbox)).records.find((record) => record.key === claimed.key);
+          const target = (await tx.doc(Outbox)).records.find((record) => record.key === item.key);
           if (!target) return true;
           target.chunkIndex += 1;
           target.attempts = 0;
@@ -246,16 +246,16 @@ export const drainOutbox = async (harness: Harness, sender: OutboxSender, option
       } catch (error) {
         if (error instanceof SendOutcomeUnknown) {
           await harness.commit(async (tx) => {
-            const target = (await tx.doc(Outbox)).records.find((record) => record.key === claimed.key);
+            const target = (await tx.doc(Outbox)).records.find((record) => record.key === item.key);
             if (target) { target.status = "outcome_unknown"; target.lastError = messageOf(error); target.updatedAt = now(); }
           }, context);
           result.unknown += 1;
           break;
         }
-        const attempts = claimed.attempts + 1;
+        const attempts = item.attempts + 1;
         const blocked = attempts >= sendAttempts;
         await harness.commit(async (tx) => {
-          const target = (await tx.doc(Outbox)).records.find((record) => record.key === claimed.key);
+          const target = (await tx.doc(Outbox)).records.find((record) => record.key === item.key);
           if (!target) return;
           target.attempts = attempts;
           target.lastError = messageOf(error);

@@ -15,7 +15,8 @@ test("capability guard rejects missing tools and accepts the explicit complete r
 });
 test("the built-in assistant extension alone satisfies the capability guard", () => {
   const registry = createRegistry();
-  registry.install(assistantExtension({ memoryPromptBytes: 8192 }));
+  const harness = { commit: async () => undefined, snapshot: async () => undefined } as never;
+  registry.install(assistantExtension({ memoryPromptBytes: 8192, workspace: { root: process.cwd(), maxBytes: 1024 * 1024 }, harness, boundUserId: "user", shellEnabled: false }));
   assert.doesNotThrow(() => requireAssistantCapabilities(registry));
   const names = registry.snapshot().tools().map(({ tool: item }) => item.name);
   assert.deepEqual([...names].sort(), [...REQUIRED_TOOLS].sort());

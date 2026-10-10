@@ -30,7 +30,8 @@ export const runPersistentReceiver = async (options: {
       expectedAccountId: options.config.accountId, expectedUserId: options.config.boundUserId,
       cursor: async () => (await harness.snapshot(ChannelState, BACKGROUND_CONTEXT))?.cursor ?? "",
       admit: (batch) => admitWechatBatch(harness, { credentials: options.credentials, batch,
-        messageBytes: options.config.limits.messageBytes, pendingLimit: options.config.limits.inboxPending, receiptLimit: 10000 }),
+        messageBytes: options.config.limits.messageBytes, attachmentBytes: options.config.limits.attachmentBytes,
+        pendingLimit: options.config.limits.inboxPending, receiptLimit: 10000 }),
       closeRuntime: () => harness.close(BACKGROUND_CONTEXT),
     });
   } finally { await harness.close(BACKGROUND_CONTEXT); }

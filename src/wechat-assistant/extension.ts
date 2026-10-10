@@ -5,15 +5,43 @@
 import { defineExtension } from "@earendil-works/pi-durable";
 import { memoryTools } from "./tools/memory.ts";
 import { todoTools } from "./tools/todo.ts";
+import { workspaceTools } from "./tools/workspace.ts";
+import type { WorkspacePolicy } from "./workspace.ts";
+import { reminderTools } from "./tools/reminders.ts";
+import { taskTools } from "./tasks.ts";
+import { mediaTools } from "./tools/media.ts";
+import { shellTools } from "./tools/shell.ts";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import type { Harness } from "@earendil-works/pi-durable";
 import { memorySection } from "./memory-prompt.ts";
 
 export type AssistantExtensionOptions = {
   readonly memoryPromptBytes: number;
+  readonly workspace: WorkspacePolicy;
+  readonly harness: Harness | (() => Harness);
+  readonly boundUserId: string;
+  readonly mediaRoot?: string;
+  readonly shellEnabled?: boolean;
 };
 
-export const assistantExtension = (options: AssistantExtensionOptions) =>
-  defineExtension({
+export const assistantExtension = (options: AssistantExtensionOptions) => {
+  // The registry is frozen before Harness.open. Defer the owner reference until
+  // a tool actually executes; never open a second Harness or database handle.
+  const owner = new Proxy({} as Harness, {
+    get(_target, property) {
+      const harness = typeof options.harness === "function" ? options.harness() : options.harness;
+      const value = Reflect.get(harness, property, harness);
+      return typeof value === "function" ? value.bind(harness) : value;
+    },
+  });
+  return defineExtension({
     name: "wechat-assistant",
-    tools: [...todoTools, ...memoryTools],
+    tools: [...todoTools, ...memoryTools,
+      ...workspaceTools(options.workspace),
+      ...mediaTools(options.mediaRoot ?? options.workspace.root, { harness: owner, recipient: options.boundUserId, workspace: options.workspace }),
+      ...shellTools(owner, options.workspace, options.shellEnabled === true),
+      ...reminderTools(owner, options.boundUserId),
+      ...taskTools(owner, BACKGROUND_CONTEXT)],
     sections: [memorySection(options.memoryPromptBytes)],
   });
+};

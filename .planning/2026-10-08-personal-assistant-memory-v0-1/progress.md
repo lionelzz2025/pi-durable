@@ -1,5 +1,244 @@
 # Progress Log
 
+## B5 离线阶段验收完成，转入 B6
+
+- 对照 B5 三项与 N14–N16：图片/文件加密接收和 outbox 协议假发送、无能力/视频/空转写的确定性通知 outbox；受信任工作区读写编辑、敏感路径/junction/大小边界、媒体冻结哈希；默认关闭的 shell、同 owner TTY 双重持久审批/过期/重放拒绝；任务状态/取消/恢复、单次/周期提醒到期补扫、occurrence 去重、本人 context 缺失 blocked。具体负例见 `tests/wechat-assistant/{inbox,b5,b5-media-outbox,b5-approvals,b5-daemon,b5-reminders,b5-scheduler,outbox}.test.ts` 等。
+- B5 最后修改后 `npm run typecheck && npm test && git diff --check` 通过：**141/141、0 fail/skip**，约 181 秒。文字 outbox 每分片在 claim 事务内读取本人 token；不支持消息在 inbox key 去重的 durable 通知 outbox 中明确回复。此为离线 fake WeChat/faux model，真实微信/付费模型和现场 Ctrl-C、旧数据迁移待 B6/B7；工作区不是强沙箱，远端结果 unknown 不承诺 exactly-once。
+- 更新 `task_plan.md`：B5 三项及 Status complete（限离线阶段），B6 in_progress；`verification.md` 顶部不再误写 B0 唯一实现。按用户要求本地阶段提交，不推送或启动真实微信。
+
+## B5 收口修复：确定性不支持通知与逐分片 context
+
+- 全量 140/140 后的范围审计发现 N14 只把“不支持”注入模型输入，不能保证微信端明确回复。现在在提交非支持消息时以原 inbox key 原子去重建立文字 outbox 通知（视频、无转写语音、缺媒体能力的图片/文件），并沿用发送状态/未知结果策略；新增真实 SQLite 的重复扫描不重复与假 sender 确定性通知断言，inbox/outbox 专项 19/19。
+- 文字 outbox 改为在 `pending→sending` 同一事务读取并校验绑定用户和 context；每一分片重新取 token。新增发送途中 token 轮换测试；typecheck、专项通过。上次全量成绩不覆盖本次改动，需再跑完整回归。B5 仍在核验，未提交或进行真实微信/模型调用。
+
+## Loop tick：B5 全量回归与逐项收口（仍未完成）
+
+- 重新读取 `task_plan.md`、`progress.md` 和 `verification.md`，运行已安装的 `scripts/check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending；此前 tick 后已有敏感文件保护进度记录。
+- 在该改动后重新执行 `npm run typecheck && npm test && git diff --check`：140/140、0 fail/skip，约 202 秒。仍是离线 fake WeChat/faux model，不能视为真实微信验收。逐项核对发现 `verification.md` 顶部还停留在 B0；并发现文字 outbox 的 context 身份检查取自事务外快照，需评估 token 轮换/身份变更窗口；B5 不勾选、不提交，继续修复并验收。
+
+## B5 工作区敏感文件保护专项（仍在验收）
+
+- 对工作区 read/write/edit 及媒体 outbox 的本地附件路径增加常见秘密位置拒绝（`.env*`、`.git`、`.ssh`、`.aws`、`.gnupg`、`.pi`、`credentials.*` 及私钥后缀），避免本机目录误配为项目根时模型直接读取或发送凭据。新增两条路径专项负例，typecheck + 5/5 + diff --check 通过；文档明确该拒绝清单不是秘密内容分类/沙箱，也不能抵御同机恶意进程并发重定向，工作区须是受信任本地目录。全量测试需在此改动后重跑。B5 尚未完成/提交。
+
+## B5 收口审计：不支持媒体和工作区边界
+
+- 对照 `task_plan.md` B5 三条及 `verification.md` N14–N16，发现图片/文件缺少可用加密能力时接收层原先直接拒绝，不会形成明确提示。现在仅在媒体能力缺失时保留受界消息并在提交给助手的输入中写入不支持标记；超限/结构错误仍拒绝，绝不下载任意 URL。空语音转写也由空串改为明确标记。新增 inbox 专项负例；11/11、typecheck、diff --check 通过。标记属于模型输入，尚不保证微信端确定性回复，B5 不能据此宣布完整验收。
+- 工作区新增实际 Windows junction 越界读/写与字节限额负例；2/2 通过。`resolveWorkspacePath` 的检查与随后文件打开之间仍有竞态风险，若不把工作区视为受信任本地目录，不能承诺抵御并发重定向。B5 保持 in_progress，后续继续审查安全边界并重跑全量。
+
+## B5 全量离线验证通过，待逐项验收与提交
+
+- 末次 `npm run typecheck`、`npm test`、`git diff --check` 均通过；全量测试 **139/139、0 fail/skip**（约 194 秒）。这是 fake WeChat + faux model + 本地 SQLite 的离线证据，不代表真实微信、付费 provider、正式数据迁移或现场 Ctrl-C 验收。
+- 接下来对照 B5 Status 子项逐项核实代码/测试/文档与残余风险；仅在覆盖充分时更新 task_plan/verification 并本地提交。B5 尚未标记完成。
+
+## B5 子项复核及全量验证前状态
+
+- 媒体入站/出站、可查询失败状态、限制测试，工作区读写编辑/附件回传及同 Harness 本机持久审批，任务取消/恢复与单次、循环提醒调度已有代码和负例；三个 B5 子项已逐项核对并关闭。B5 **整体仍未完成**，正在执行末次完整回归、逐项核对证据后才可更新计划状态并本地提交。
+- 审批为单进程同 DB 独占 owner 的本机 TTY 二次确认，不提供会另开 SQLite 的 CLI；外部命令没有沙箱，默认关闭且不在离线测试真正执行。发送前 now-user 与 context 的匹配已加负例。
+
+## B5 全量回归后发现跨用户 context 风险（阶段仍未完成）
+
+- 完整离线 `npm test` 138/138、0 skip/fail（约 191 秒）；此前审批和 CLI 专项 9/9、typecheck、diff --check 通过。此结果只证明当时的代码；后续身份修复还需再跑全量。
+- 审核提醒/文字发送路径发现：`ChannelState.contextToken` 存在但 `userId` 与提醒收件人不一致时，提醒可能被标为可发送；`drainOutbox` 也仅核 token 是否非空。现在两处在发送前核对 userId，外来 token 使提醒/outbox 进入 blocked，不发送。新增真实 SQLite 的跨用户负例；提醒+outbox 专项 10/10、typecheck 通过。
+- 媒体 outbox 对 `sending` 增加 `attempts++`，失败可查询计数不再保持零；媒体/提醒专项 7/7 通过。B5 仍 in_progress，未提交；真实微信、模型、正式迁移均未运行。
+
+## B5 审批入口专项复核（阶段仍未完成）
+
+- 本轮读计划/进度并运行已安装 planning-with-files 的 `scripts/check-complete.sh`（仓库内同名脚本不存在）：5/8 complete，B5 in_progress、B6/B7 pending。
+- 移除了会在运行时另开 EXCLUSIVE SQLite 的独立 `approvals` CLI；保留 daemon 同 Harness 的本机 TTY 双次确认。新增非 TTY 不作决定、第二次确认错误不作决定的自动化负例，daemon 同 owner 审批→消费测试继续通过；审批协程异常现在中止 daemon 并传播，而非无观察的后台拒绝。专项 9/9、typecheck、diff --check 通过。真实人机 Ctrl-C、shell 风险边界与整体 B5 尚未完成验收，未提交。
+
+## B5 同进程审批入口接线（仍需安全审计）
+
+- 新增 `approval-console.ts`：仅本机 TTY 可列 pending、查看完整 command/argv/workspace/过期时间、再次输入精确 approve/reject ID；daemon 在 shell 配置开启时用同一 Harness 运行本地控制台，终止时取消，不另开 EXCLUSIVE DB。测试在 daemon polling 期间创建→决定→执行→单次消费（真实 SQLite/Node 子进程），专项 2/2、typecheck 通过。先前专项测试调用工具时少传第三个参数触发 TS2554，已改为按 defineTool 签名传入。
+- 独立 `main.ts approvals` 旧命令仍在，运行中会因独占存储而失败；后续应移除/限制为停机维护，并补实际 TTY 人工确认负例。B5 保持 in_progress，未作阶段提交。
+
+## B5 CLI agent 启动路径接线（仍未验收）
+
+- `main.ts start --allow-wechat --legacy-stopped --allow-model` 在已有凭据且所选模型可用/环境变量存在时，调用单持有者 daemon、独立 FastHub provider 和真实 API/CDN/sender；`--receive-only` 保持离线存入 inbox，默认没有模型授权即拒绝。未执行该路径真实微信或付费模型；仅通过 `npm run typecheck`、CLI+daemon 专项 6/6 和 `git diff --check`。
+- 目前 CLI `approvals` 仍另开 EXCLUSIVE DB，和运行中的 daemon 不能并发审批；没有可注入的完整 CLI agent 假网络测试。B5 继续 in_progress、不提交。下一步解决同进程人工审批与完整路径测试，再检查媒体、shell、任务/提醒的承诺边界。
+
+## B5 单 Harness 扩展注册循环已解开（非阶段完成）
+
+- `assistantExtension` 以延迟取 owner 的代理在 Registry 冻结前注册；daemon 创建本项目完整扩展而非测试夹具里的同名假工具。代理在工具调用时绑定真实 Harness 方法，不另开数据库。daemon 仍允许显式测试 Registry 覆盖；`b5-daemon.test.ts` 现用完整扩展通过假微信→真实 Harness+faux→假发送及重启复用 cursor。
+- `npm run typecheck`、daemon+capabilities 专项 3/3 通过。一次错误测试命令 `node --import tsx` 因未安装 tsx 报 `ERR_MODULE_NOT_FOUND`，改用本机 Node v24 原生 TypeScript 支持的 `node --test` 成功。CLI `start`、人工审批协作及付费模型授权仍未闭环，B5 保持 in_progress，不提交。
+
+## Loop tick：B5 运行入口仍未闭环
+
+- 本轮读取计划、进度和 findings；仓库内 `scripts/check-complete.sh` 不存在（127），改用已安装 planning-with-files 的脚本并绑定 `PLAN_ID`：5/8 complete，B5 in_progress、B6/B7 pending。此条记录本轮检查结果。
+- 源码核对：`main.ts start` 仍拒绝 agent 模式，`assistantExtension` 在 Registry 冻结前需要 Harness 引用，`approvals` 单独开 EXCLUSIVE DB 无法与运行中 daemon 协作；daemon 专项测试用模拟 REQUIRED_TOOLS，因此不能证明真实扩展组装。B5 不能勾选或提交。下一步先完成可测单进程组装与审批交互，再验收媒体/提醒故障窗。
+
+
+## B5 阶段中途全量回归（不是完成验收）
+
+- `npm test` 完整离线回归 136/136、0 fail/skip；typecheck、diff --check 通过。包含单持有者假微信 daemon、加密入站、多媒体故障、媒体 outbox 假协议成功及 unknown 重启测试。**不能把自动测试数当作 B5 完成**：`main.ts start` 仍拒绝 agent 模式；extension 构造需 Harness 引用而 Harness.open 前必须冻结 registry，存在真实 CLI 组装循环；同进程人工审批入口仍未解决。还需评估假协议覆盖边界、安全限制及 B6/B7。B5 保持 in_progress，不阶段提交。
+
+## B5 可查询媒体发送状态
+
+- `media_delivery_status` 从独立持久 MediaOutbox 查询 key/status/attempts/原因，仅返回绑定收件人的操作；`media_send_file` 的回复仍是 queued/delivered:false，不把入队冒充发送成功。能力守卫新增状态工具；专项 gate+capabilities 3/3、typecheck、diff --check 通过。blocked/outcome_unknown 自动发送仍禁止，显式重试/人工核对协议需设计。B5 保持 in_progress。
+
+## B5 假协议媒体发送成功路径专项
+
+- `tests/wechat-assistant/b5-media-outbox.test.ts` 新增上传加密元数据/已持久 `sending` 下 sendMessage/成功回执后不重复发送的假 API/CDN 专项；3/3、typecheck、diff --check 通过。该证据是离线协议模拟，未在真实微信发送，亦未覆盖 crash-after-send-before-receipt 的真实远端去重；状态只声称“协议接受”，不承诺用户端 exactly-once。B5 仍 in_progress。
+
+## B5 媒体 outbox 接入单持有者离线 pump
+
+- `openAssistantRuntime` 启动恢复时执行 `recoverMediaOutbox`；`assistant-pump.ts` 在同一个循环内顺序处理文字 outbox 和 media outbox，`assistant-daemon.ts` 传入工作区策略、协议 API/CDN/凭据。专项 daemon + media outbox 3/3、typecheck、diff --check 通过。当前测试没有覆盖真实 media 成功上传/发送，也没有证明权限/失败窗、CLI 实际启动接线或审批协作；不能据此声称 B5 通过。仍 in_progress，不提交。
+
+## B5 媒体 outbox 独立原语（离线）
+
+- 新增 `src/wechat-assistant/media-outbox.ts`：工具以 durable callId 入队并冻结路径/哈希/大小/收件人，sender 在网络前提交 `sending`，重启时 `sending→outcome_unknown`，文件变化/无 context 时 `blocked`，不自动重试不明结果。`media_send_file` 已改为仅排队，不再直接触网。新增 `b5-media-outbox.test.ts` 与改造 gate 测试；专项 3/3、typecheck、diff --check 通过。完整假协议的成功发送与上传/发送故障窗、实际 daemon drain 接线尚待验证，当前只是原语，不代表媒体出站完成。
+- 检查时补上缺失上传参数拒绝和提交 `sending` 时重新检查绑定/context 的事务边界。B5 仍 in_progress、不提交；无真实微信或付费模型。
+
+## B5 单持有者 daemon 组装原语（离线）
+
+- 新增 `src/wechat-assistant/assistant-daemon.ts`，把完整 Registry/Models/Harness、持久 cursor admission、后台 pump、发送适配器、媒体 CDN、账号锁与关闭生命周期组装成可注入的单进程入口；先由调用方提供模型和凭据，未从 CLI 自动启动/登录。新增 `tests/wechat-assistant/b5-daemon.test.ts`：假微信批次→真 SQLite/Harness+faux→假发送，关闭重开沿用 cursor 且不重复发送；专项 1/1、typecheck、diff --check 通过。
+- 这仍是离线构件，不是可交付的 `start` 命令：实际 provider/扩展绑定（Harness 构造前无法直接取得 Harness）、本地审批与独占数据库协作、媒体出站 durable outbox、安全/错误/重启故障测试尚缺。B5 状态不改、不提交、不连接真实微信/付费模型。
+
+## B5 投递泵存储错误 fail-fast
+
+- `runAssistantPump` 在未提供 `onError` 时不再吞掉 SQLite/媒体/发送等意外错误继续循环；异常向调用者传播，允许 daemon 做退化/终止诊断。新增模拟存储失败专项；pump 3/3、typecheck、diff --check 通过。提供回调时仍可持续重试，最终运行入口须明确选择故障策略。
+- 尚未将 pump 接入 CLI 单进程生命周期，不能声称 B5c 或整个阶段完成。
+
+## B5 单 Harness 后台投递泵原语
+
+- 新增 `src/wechat-assistant/assistant-pump.ts`，同一 Harness 周期执行 received inbox 提交、结算、答案 outbox 补建、到期提醒、文字 outbox drain 和提醒状态协调；AbortSignal 可停，错误回调暴露，不把易丢的通知当唯一触发。新增 `tests/wechat-assistant/b5-pump.test.ts` 离线真 SQLite/Harness+faux→假发送，及无入站到期提醒 blocked；2/2、typecheck、diff --check 通过。
+- 这是后台原语，尚未由 CLI daemon、模型 provider/凭据/渠道生命周期构造接入；媒体 outbox 和交互审批仍缺，B5 不完成。下步在保留人工授权边界的前提下接入单进程主循环，并测试关闭/重启；无真实微信或付费模型操作。
+
+## Loop tick：B5 启动媒体补扫可注入 CDN，仍未接 daemon
+
+- 按本轮要求读计划/进度并运行安装包的 `check-complete.sh`：5/8 complete，B5 in_progress、B6/B7 pending。上一 tick 已有“写盘前校验”记录；本条记录新工作。
+- `openAssistantRuntime` 增加可注入的媒体 CDN/根目录/大小/signal 参数，将恢复时已持久 received 的媒体交给 `submitReceivedInbox` 处理，不再无条件因缺下载器被拒。`tests/wechat-assistant/agent-runtime.test.ts` 新增启动先缺 transport 拒绝、关闭后带伪 CDN 重开并只下载一次/提交的测试；专项 3/3、typecheck 通过。
+- 这是可测试的恢复入口，不等于 CLI 已接 WeChat/模型/调度；模型 provider 与 Registry 的实际组装、同进程审批、媒体出站 outbox 仍缺。B5 不完成、不提交；下步建立单持有者 agent daemon 构造/运行边界及故障测试，不登录真实微信、不触付费模型。
+
+## B5 文件声明长度在落盘前验证
+
+- 将 `file_item.len` 与解密后的实际字节数的比较前移到 `downloadAndStoreWechatMedia` 写盘之前。此前大小不符仍会留下未关联的明文孤儿文件；现在此类不符不落盘，也不提交 inbox。测试增加 `readdir(root)` 必须 ENOENT 的负断言；inbox 专项 10/10、typecheck、diff --check 通过。
+- 传输中断或落盘成功到关联 commit 之间仍可能有孤儿文件；不能直接物理删除，需设计回收站清理/稳定命名与恢复协议。B5 仍 in_progress。
+
+## Loop tick：B5 加密附件边界与声明长度校验
+
+- 本轮已读取计划、进度并运行已安装的 `check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending。上一轮已有进度记录；此条记本轮实际变更。
+- 下载密文允许 PKCS#7 最多增加一个 AES block，明文仍被 `storeWechatMedia` 按配置限额约束；增补 16 字节明文/32 字节密文专项。下载文件的实际明文字节数还需与协议 `file_item.len` 一致，否则保持 received，不提交模型；新增不匹配专项。inbox 10/10、typecheck、diff --check 通过。发现的原因是误将明文限额传给密文下载，正好按块对齐时会拒绝合法附件。
+- `src/wechat-assistant/conversations.ts` 入站原语还未由真实 agent daemon 接入；outbound media 仍 fail-closed、shell 审批并发和 scheduler 接线尚缺。B5 不完成、不提交，不进入 B6；真实微信/付费模型未触发。
+
+## B5 消息元数据与附件大小配额分离
+
+- `admitWechatBatch` 新增独立 `attachmentBytes` 上限；保持 `messageBytes` 仅约束持久化的 JSON 元数据，`receiver.ts` 从配置传入附件限额。新增 4096 字节附件在 512 字节消息元数据配额下被接纳的专项，inbox+receiver 9/9、typecheck、diff --check 通过。此前把附件大小错误地和 messageBytes 比较，会让默认 32KiB 以上、配置允许 20MiB 的附件被拒绝；这是漏测边界。
+- 当前依然只完成入站原语，实际 agent daemon 接线与可恢复出站待办；B5 不完成、不提交。
+
+## Loop tick：B5 多附件半途失败逐项续接
+
+- 按请求复读 `task_plan.md` 与 `progress.md`，运行已安装的 `scripts/check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending。上一 tick 已有进度记录；本条为本轮实际新增变更。
+- `submitReceivedInbox` 改为每个已授权附件下载/解密/落盘后单独提交元数据，再处理下一个；启动恢复逐项核对名称、类型、可信根、大小、SHA-256。新增两文件第二次下载故障注入：首次失败后第一个元数据已持久化，重试仅下载第二个；inbox 专项 7/7、typecheck、diff --check 通过。
+- 仍未解决落盘到元数据提交之间的孤儿文件、完整运行泵、媒体出站 outbox、独占 DB 下的人工审批、周期 scheduler 接线。B5 阶段不完整，Status 保持 `in_progress`，不提交，不进入 B6；真实微信和付费模型未触发。
+
+## B5 入站附件落盘后恢复完整性守卫
+
+- `verifyStoredWechatMedia` 对持久关联的附件重启恢复时检查可信根目录、真实路径、文件类型、大小及 SHA-256；缺失、被改写或目录逃逸时留在 received，不提交可误导模型的路径。新增 received→媒体关联→文件被改写故障窗测试；inbox 专项 6/6、typecheck、diff --check 通过。
+- 此守卫解决了已落盘文件变化的一类恢复风险，不表示多附件半写清理、出站 outbox、daemon 实际接线完成。B5 Status 仍为 in_progress，未提交。
+
+## B5 媒体密钥上游契约核对
+
+- 复查上游 `C:/Users/hongchao.zhu/.pi/agent/npm/node_modules/pi-wechat-assistant/src/media.ts`：文件的 `aes_key` 是 base64 编码的 32 字符十六进制字符串，再 hex 解码为 16 字节 AES key；不是直接 base64 16 原始字节。回退先前误改的 `inspectWechatMedia`，改 `inbox.ts` 接收校验与解密使用同一表示，测试 fixture 恢复上游形式。专项 inbox 5/5、typecheck、diff --check 通过。之前进度条目对“16 字节原始 key 的 base64”的描述已被本条纠正。
+- B5 仍未完成：运行泵、media outbox、审批并发及多媒体故障窗尚需实现/验证；不勾选、不提交。
+
+## B5 入站媒体恢复边界补测
+
+- `submitReceivedInbox` 对已通过协议引用检查、但尚未落盘的加密媒体，在无下载 transport 时 fail-closed：保留 received，不再把它误提交为“不支持”而永久结算。`tests/wechat-assistant/inbox.test.ts` 同时验证拒绝后提供伪 CDN 可解密落盘并只下载一次；专项 5/5、typecheck、diff --check 通过。
+- 仍未把下载 transport 接入真正运行泵；已落盘媒体文件丢失、部分多附件故障窗、outbound media outbox、daemon/审批接线尚未验收。B5 保持 in_progress，不提交。
+
+## Loop tick：B5 入站媒体协议契约修正与恢复测试
+
+- 重读计划与进度；运行已安装 planning-with-files 的 `scripts/check-complete.sh`（仓库内无同名脚本）：5/8 complete，B5 in_progress，B6/B7 pending。上一轮进度已有媒体 fail-closed 记录；本轮记录新增变更。
+- 将已接收消息的加密附件在 `submitReceivedInbox` 里先下载、解密、落盘并把元数据关联进持久 inbox，然后再提交到会话；同一 received 记录重试读取元数据，不重复下载。新增 `tests/wechat-assistant/inbox.test.ts` 授权附件专项；5/5、typecheck 与 diff --check 通过。调试时发现测试密钥需使用 16 字节原始 key 的 base64，Chord transaction overlay 不可在 commit 后直接引用，已用显式值拷贝修正。注意目前 `openAssistantRuntime` 启动补扫未传 CDN/options、运行中的接收循环仍未连到提交泵，因此**不是实际 daemon 入站闭环**；失败/半写文件的清理、大小与多媒体映射还需审查。
+- B5 三子项仍未通过，不修改 Status、不提交，不提前进入 B6；下一步接单持有者运行泵与媒体 outbox，真实微信/付费模型仍待授权。
+
+## Loop tick：B5 媒体发送 fail-closed 安全修正
+
+- 按用户要求读取 `task_plan.md`、`progress.md` 并运行安装包内的 `check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending；上一 tick 已有新增进度记录，本条记录本轮代码变化。
+- 复核发现旧 `media_send_file` 会绕过 outbox 直接上传并调用 `sendMessage`，崩溃后无 durable `sending/outcome_unknown` 回执。已改为明确拒绝发送且不触网，避免假装支持可恢复附件；新增 `tests/wechat-assistant/b5-media-gate.test.ts` 验证配置了伪 CDN 也零网络调用、越界路径拒绝。专项 1/1、typecheck、diff --check 通过。
+- 这是阻止不安全副作用的临时门禁，**不是完成图片/文件出站**。入站下载未接进 receiver/submission，定时调度未接 daemon，审批 CLI 与运行时独占锁仍不兼容；B5 三项未通过，Status 不改、不提交、不提前进入 B6。下步实现经持久 outbox 的媒体发送和实际单持有者运行接线；不操作真实微信/付费模型。
+
+## B5 自动回归与未闭环项复核
+
+- 本轮运行 `npm test`：121/121、0 fail/skip；此前 `npm run typecheck`、`git diff --check` 通过。这些是离线自动化证据，不是 B5 的完整验收。
+- 复核 `media.ts`/`tools/media.ts`、`outbox.ts`、`agent-runtime.ts`、`main.ts`：媒体发送仍由工具直接调用 CDN/sendMessage，未进入持久 outbox；`runReminderScheduler` 虽有独立重启测试，未被 daemon 启动；普通 `start` 仍拒绝 agent 模式；本地 `approvals` 命令和运行中 EXCLUSIVE DB 的并发协调未解决。B5 三项仍不能勾选，保持 5/8、B5 in_progress；不做阶段提交。继续优先设计单持有者运行/审批与媒体发送可恢复边界；无真实微信/付费模型操作。
+
+## Loop tick：B5 周期提醒原语与实际运行接线缺口
+
+- 重读计划和进度；仓库内 `scripts/check-complete.sh` 不存在，改用已安装 planning-with-files 的脚本并显式传计划路径：5/8 complete，B5 in_progress、B6/B7 pending。上一 tick 已有 shell 审批边界记录，因此不因“无条目”补空记录；本条记录新增实施与审查结果。
+- 新增 `src/wechat-assistant/reminder-scheduler.ts` 的可取消周期补扫和 `tests/wechat-assistant/b5-scheduler.test.ts`；在离线 Harness/SQLite 下，无入站消息也会产生一条 blocked occurrence，关闭重开仍仅一条。专项 1/1、typecheck、diff --check 通过。**该 scheduler 目前没有接入 CLI daemon**，不能据此勾选 B5 提醒项。
+- 审查发现本地 `approvals` CLI 与 daemon 各自打开同一 EXCLUSIVE SQLite，运行期间无法并发审批；并且 `src/wechat-assistant/tools/media.ts` 直接上传/发送，未在 durable outbox 先落盘和记录 sending/unknown，不能作为可恢复媒体发送闭环。现有 `main.ts start` 仍明确拒绝 agent 模式。B5 继续 in_progress，暂不提交或进入 B6；下步需落实同进程本地审批入口、真实运行接线、媒体 outbox 与故障注入测试。未连接真实微信/付费模型。
+
+## Loop tick：B5 本地 shell 审批边界已推进，阶段仍未完成
+
+- 按计划读取 `task_plan.md`/`progress.md` 并执行 planning-with-files 的 `scripts/check-complete.sh`（明确计划路径）：5/8 complete，B5 in_progress、B6/B7 pending。自上一 tick 有本条前的 B5 子任务审计记录；未达到 B5 阶段完成门槛，Status 保持不变。
+- 已从模型工具清单移除 `shell_approval_decide`；新增 `main.ts approvals` 本地命令，只在 shell 配置开启且终端交互确认完整命令/参数后调用持久 `decideShellApproval`。待批准记录保存原始 argv 供人核对，消费仍绑定命令/argv/工作区/有效期。专项测试覆盖持久化、参数/工作区不匹配、单次消费和非交互终端拒绝；`npm run typecheck` 及专项测试 6/6 通过。
+- 仍未解决媒体可查询的未知发送状态、真实运行时接线及定时提醒周期调度；因此 B5 不勾选/不提交。继续补这些缺口，B6/B7 暂不开始，真实微信/付费模型仍需授权。
+
+## B5 子任务返回：118/118 自动测试通过，但安全/集成验收阻塞
+
+- 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53`、子任务 `bec8d8fb-1a6e-4f04-b00d-76d9abdb172d` 已完成；报告记录 `npm run typecheck` 通过、专项 6/6、全量 `npm test` 118/118。此前 240 秒 bash 注意事件是运行中测试，子任务最终正常返回；命令控制器不可用，未强制中断。
+- 父代理核对 `src/wechat-assistant/tools/shell.ts`：`shell_approval_decide` 作为模型可调用工具，与 `shell_request_approval`、`shell_execute_approved` 同时注册。模型可自行请求并批准自己的任意命令，不满足计划中的“需本地持久审批”；即使 `shellEnabled` 默认关闭，一旦开启就不具备独立批准边界。该能力暂不可启用/交付，必须移除模型批准入口并通过独立本地人工界面审批及专项测试。
+- 子任务明确未声称 B5 完成：媒体协议入站/出站、媒体发送未知结果、定时器进程恢复和 CLI/Harness 实际接线仍有缺口。B5 保持 `in_progress`，B6/B7 保持 pending；不作阶段提交、不登录真实微信、不调用付费模型。下步先修复审批安全边界，再逐项补齐闭环和验收。
+
+## 当前接续：B5 等待 worker 完成后验收
+
+- 上轮已读取计划并检查异步工作流 `6ee76556-e854-4cea-852e-ff31747bbc53`：唯一子任务仍 running，未收到完成报告；B5 尚未验证、提交，B6/B7 不提前开始。
+- 本轮按阶段交付要求继续核对 worker 结果；只有 B5 三项范围与全量测试均通过后才标 complete 并本地提交一次。如出现阻塞，记录实际证据并报告，不代替真实微信授权。
+
+## 当前接续：B5 worker 实施与验证中
+
+- 前一轮读取计划并核对 subagent 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 及子任务 `bec8d8fb-1a6e-4f04-b00d-76d9abdb172d`：worker 已写 shell 工具并接入扩展，正运行 `npm run typecheck`，尚未交付 B5 全量验收报告。
+- 本轮继续按用户要求推进：先核对任务当前状态，完成后审计 B5 媒体/文件、shell 审批、任务/提醒与测试；门槛通过才更新状态并本地提交一次，再进入 B6。不抢占唯一业务代码写者，不提前声称完成。
+
+## 当前接续：B5 单写者实施与阶段提交门槛
+
+- 上轮已按计划路径检查：5/8 complete，B5 in_progress，B6/B7 pending；B5 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 最近一次状态 running，尚无可验收完成报告。
+- 遵循用户要求继续未完成阶段；先核对工作流实际状态与交付，再审查 B5 三项范围、全量测试及安全边界。仅当 B5 验证通过时更新阶段状态并本地提交一次；若出现决策或重大问题则明确报告，不假报完成。不连接真实微信、不调用付费模型、不修改全局设置。
+
+## Loop tick：B5 尚无新交付
+
+- 重新读取 `task_plan.md`/`progress.md` 并调用已安装的 `check-complete.sh`（明确指定计划文件）：5/8 complete，B5 in_progress、B6/B7 pending。上次 tick 后没有新增交付条目；工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 当前仍 running。
+- 继续由该单一 subagent 开发 B5，不并发修改业务代码；完成报告与全量验收尚未到达，所以本轮不标完成、不阶段提交或切换到 B6。
+
+## Loop tick：B5 子代理尚未交付
+
+- 本轮按计划路径重读 `task_plan.md`/`progress.md` 并运行 `check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending。自前次 tick 无新增交付记录；工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 查询仍为 running。
+- 单一 worker 继续 B5；尚未得到完成报告与全量测试证据，不更改阶段 Status、不提交、不进入 B6；父代理收到完成通知后验收。
+
+## Loop tick：B5 等待单写者交付
+
+- 再读计划与进度并运行已安装 planning-with-files 的 `check-complete.sh`（显式传 `task_plan.md`）：5/8 complete、B5 in_progress、B6/B7 pending。自上次 tick 尚无新的阶段交付或测试报告；现有 worker 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 仍 running。
+- 当前阶段继续由该子代理实施，父代理不并发写业务源码；待收到结果逐项核验 B5，未满足门槛不提交/不标 complete/不转 B6。
+
+## Loop tick：B5 开发未结束（本轮）
+
+- 重读 `task_plan.md`/`progress.md`，以明确计划文件运行 `check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending。上次 tick 后仍无新阶段交付；再次查询唯一 worker 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53`，仍显示 running，未有可验收的完成报告。
+- 继续 B5 当前工作而不并发写入、不重复委派；待完成通知后复核源码、测试与三条 B5 范围，再决定是否修改 Status/提交。B6 尚不可开始。
+
+## Loop tick：B5 子代理继续运行
+
+- 按明确计划路径重读计划/进度并执行 `check-complete.sh`：5/8 complete，B5 in_progress，B6/B7 pending。上轮以来没有新增阶段交付记录；本次复核工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 与子任务 `bec8d8fb-1a6e-4f04-b00d-76d9abdb172d` 仍 running。
+- B5 尚不能确认完成；继续让单一写者实施，父代理等待异步交付后审计与验证，不重复启动子代理，不改阶段 Status 或进入 B6。
+
+## Loop tick：B5 尚在实施
+
+- 再次核对计划与进度，并按明确计划文件路径运行 `check-complete.sh`：5/8 complete、B5 in_progress、B6/B7 pending；没有阶段达到新完成门槛，故不修改完成状态或勾选子项。
+- 上一 loop tick 以来没有新的阶段交付记录；唯一写者 subagent 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 状态为 running（子任务 `bec8d8fb-1a6e-4f04-b00d-76d9abdb172d`）。本轮等待其异步完成通知后进行代码与测试验收，不并行触碰业务代码，暂不进入 B6 或提交 B5。
+
+## Loop tick：B5 subagent 实施中（阶段尚未完成）
+
+- 本轮重新读取 `task_plan.md` 和 `progress.md`，以明确计划路径执行 planning-with-files 的 `scripts/check-complete.sh`：5/8 阶段 complete，B5 尚未达到验收，B6/B7 pending。修正 B5 `**Status:** pending` 与顶部 `Current Phase: B5 in_progress` 不一致的问题，改为 `in_progress`；未勾选 B5 子项或提交阶段完成。
+- 用户要求使用 subagent 开发；单一 worker 工作流 `6ee76556-e854-4cea-852e-ff31747bbc53` 已在现有工作区异步启动，任务为补齐 B5 媒体、工作区/shell 审批、任务/提醒闭环及测试。父代理暂不并行修改业务代码，等待完成通知后审查证据。工作树仍保留 B5 未提交改动；无真实微信登录/发送、付费模型或全局设置改动。
+- 项目内无 `scripts/check-complete.sh`，直接调用该路径返回 127；实际脚本位于已安装 planning-with-files 包，传入明确 `task_plan.md` 路径后正确报告 5/8。
+
+## B5 进行中：阶段交付审计与缺口（未提交）
+
+- 核对 `task_plan.md` B5 三项与当前源码：已有媒体引用校验/解密/文件落盘原语、工作区读写编辑原语、审批记录、任务与提醒文档、提醒 outbox 草案，但媒体尚未接入入站/出站闭环，缺发送工具；shell 审批未接执行，任务工具与提醒尚缺完整端到端验证，因此 B5 **不能标 complete 或进行阶段提交**。
+- 修正 `tasks.ts` 把数字 TaskId 错当 `task_…` 字符串的拒绝逻辑；注册任务工具；测试改用 `data/test-runs/` 保留产物，避免 Windows 下以 `rm` 永久删除。
+- `npm run typecheck` 通过；专项 `node --test --test-concurrency=1 tests/wechat-assistant/b5.test.ts tests/wechat-assistant/capabilities.test.ts` 4/4 通过。曾误用 `node --import tsx`，本项目无 tsx；应直接 `node --test`（Node 24）。这仅覆盖局部，未运行本轮全量与真实微信。
+- 后续：先补媒体接收与发送的 durable 边界、工作区/审批 shell 可执行入口、任务/提醒重启与 blocked/时区测试；再全量测试、阶段证据审计、更新状态并本地提交。B6/B7 均待完成，不使用真实微信、付费模型或全局设置。
+
 ## B4 完成：durable outbox 与文字恢复闭环（文字内测）
 
 三条 B4 范围项均已有实现与测试证据，按计划标注 complete **但仅代表“文字内测”里程碑**，非完整交付。全量 `npm test` 114/114、`npm run typecheck` 通过。
