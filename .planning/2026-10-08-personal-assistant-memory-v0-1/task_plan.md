@@ -17,7 +17,7 @@ PLAN_ID: 2026-10-08-personal-assistant-memory-v0-1
 
 ## Current Phase
 
-新路线：B0–B5 complete（均为离线阶段验收，B4 仅“文字内测”），B6–B7 pending；B4 已实现 durable outbox（答案补扫、UTF-8 分片、发送回执、退避、blocked/outcome_unknown 与人工 `/retry`）并完成假微信→真 Harness+faux→假微信全链路故障窗口测试与重启续传。B3 已实现待办工具（复用领域事务与幂等回执）、独立长期记忆（新增/检索/更正/遗忘 + 有界提示注入）并验证跨 reset/压缩/重启可检索。B2 已完成持久 inbox/绑定/FIFO、Harness/模型/工具守卫与结算补扫、以及绕过模型的确定性控制命令，离线硬杀恢复通过。B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
+新路线：B0–B5 complete（均为离线阶段验收，B4 仅“文字内测”），B6 in_progress，B7 pending；B4 已实现 durable outbox（答案补扫、UTF-8 分片、发送回执、退避、blocked/outcome_unknown 与人工 `/retry`）并完成假微信→真 Harness+faux→假微信全链路故障窗口测试与重启续传。B3 已实现待办工具（复用领域事务与幂等回执）、独立长期记忆（新增/检索/更正/遗忘 + 有界提示注入）并验证跨 reset/压缩/重启可检索。B2 已完成持久 inbox/绑定/FIFO、Harness/模型/工具守卫与结算补扫、以及绕过模型的确定性控制命令，离线硬杀恢复通过。B1 离线协议/凭据/账号锁/登录生命周期与持久接收入口已验证，真实平台测试仍在 B7 未执行。旧阶段证据保存在 `legacy-task-plan.md`、`legacy-verification.md`、`legacy-handoff.md` 和 `progress.md`，不是新路线通过证据。
 
 ## Next Step
 

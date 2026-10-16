@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-**B0–B4 已按阶段完成离线实现；B5 在收口验收中，B6/B7 待执行。** B5 的媒体、工作区、审批、任务与提醒已有离线测试，但 N14 的“不支持格式明确回复”已改为 inbox key 去重的 durable outbox 通知并完成假发送测试，真实微信投递尚未验收；N15 的工作区权限依赖受信任本地目录且不是安全沙箱；N16 的真实进程/平台行为仍需核对。N01–N20 不以本文件顶部笼统判定全部通过，逐项证据须以阶段提交和 `progress.md` 为准；W01–W08 均未执行。
+**B0–B5 已按阶段完成离线实现；B6 在迁移/运维自动化中，B7 待真实验收。** N14 的“不支持格式明确回复”已改为 inbox key 去重的 durable outbox 通知并完成假发送测试，真实微信投递尚未验收；N15 的工作区权限依赖受信任本地目录且不是安全沙箱；N16 的真实进程/平台行为仍需核对。N18 的旧库备份/导入/新路径恢复已有离线专项，但正式迁移未获授权且 B6 矩阵未完成。N01–N20 不以本文件顶部笼统判定全部通过，逐项证据须以阶段提交和 `progress.md` 为准；W01–W08 均未执行。
 
 B0 证据：`tests/wechat-assistant/recovery.test.ts`，硬杀模型与 safe/unsafe 工具后重开、同 root/requestId/provider identity、已提交答案重读、Harness 存储独占。后续 B1–B5 专项及全量离线测试见 `progress.md`；B5 收口后全量 141/141、typecheck、diff --check 通过（离线 fake WeChat/faux model）。真实微信未连接。规格见 `../../docs/wechat-assistant-spec.md`。
 

@@ -8,6 +8,7 @@ import { dispatchDueReminders, reconcileReminders } from "./reminders.ts";
 import { drainMediaOutbox } from "./media-outbox.ts";
 import type { WechatApi } from "./channel/api.ts";
 import type { WorkspacePolicy } from "./workspace.ts";
+import { abortExpiredRuns } from "./run-deadlines.ts";
 
 /** One owner drives recovery even while WeChat has no incoming messages.
  * Poll admission is independent; its durable cursor is never advanced here.
@@ -19,12 +20,14 @@ export const runAssistantPump = async (harness: Harness, options: {
   media?: { root: string; maxBytes: number; cdn: WechatCdn };
   mediaSender?: { policy: WorkspacePolicy; api: WechatApi; cdn: WechatCdn; token: string };
   intervalMs?: number;
+  runTimeoutMs?: number;
   onError?: (error: unknown) => void;
 }): Promise<void> => {
   const intervalMs = options.intervalMs ?? 1_000;
   if (!Number.isSafeInteger(intervalMs) || intervalMs < 100 || intervalMs > 3_600_000) throw Error("Invalid assistant pump interval");
   while (!options.signal.aborted) {
     try {
+      if (options.runTimeoutMs !== undefined) await abortExpiredRuns(harness, options.runTimeoutMs);
       await submitReceivedInbox(harness, options.media && { ...options.media, signal: options.signal });
       await reconcileInbox(harness);
       await enqueueAnswers(harness, { recipient: options.recipient });

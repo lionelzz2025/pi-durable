@@ -14,9 +14,14 @@ import { shellTools } from "./tools/shell.ts";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Harness } from "@earendil-works/pi-durable";
 import { memorySection } from "./memory-prompt.ts";
+import { DEFAULT_LIMITS, type WechatLimits } from "./config.ts";
+import { modelAdmissionHook } from "./run-admission.ts";
+import { RequestMarkerGate } from "./request-gate.ts";
 
 export type AssistantExtensionOptions = {
   readonly memoryPromptBytes: number;
+  readonly limits?: Pick<WechatLimits, "runTimeoutMs" | "runModelRequests" | "dailyCostUsd" | "modelOutputTokens" | "modelRetries">;
+  readonly gate?: RequestMarkerGate;
   readonly workspace: WorkspacePolicy;
   readonly harness: Harness | (() => Harness);
   readonly boundUserId: string;
@@ -43,5 +48,6 @@ export const assistantExtension = (options: AssistantExtensionOptions) => {
       ...reminderTools(owner, options.boundUserId),
       ...taskTools(owner, BACKGROUND_CONTEXT)],
     sections: [memorySection(options.memoryPromptBytes)],
+    hooks: [modelAdmissionHook(owner, options.limits ?? DEFAULT_LIMITS, options.gate)],
   });
 };

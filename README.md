@@ -96,7 +96,7 @@ pi-durable/
 要点：
 
 - **ESM**：`"type": "module"`。相对导入必须带扩展名（`./foo.ts`）。
-- **直接跑 TS**：Node 22.6+ 原生剥离类型，`node examples/01-hello.ts` 即可，无需 ts-node/tsx。
+- **直接跑 TS**：本项目以实测 Node v24.14.1 为最低声明版本，原生剥离类型，`node examples/01-hello.ts` 即可，无需 ts-node/tsx。Node 22.6 的类型剥离最初需要实验标志；不能仅凭这一版本号承诺这里的无标志启动。
 - **`tsconfig.json` 用 `noEmit`**：TS 只负责类型检查（`npm run typecheck`），产物不存在。
 - **`verbatimModuleSyntax: true`**：类型导入必须写 `import type`，避免运行时残留导入。
 
@@ -544,7 +544,7 @@ type SettledSubmissionRecord = SubmissionRecord & { status: "done" | "unanswered
 ```jsonc
 {
   "type": "module",
-  "engines": { "node": ">=22.6" },
+  "engines": { "node": ">=24.14.1" },
   "dependencies": {
     // pi-durable 声明了这两个作为自己的依赖，但示例和 src/ 直接 import 它们，
     // 所以这里也显式声明（同版本区间会被 npm 去重成同一份，不会出现两份 pi-ai）。

@@ -13,6 +13,9 @@ import { ChannelState } from "./documents.ts";
 import { admitWechatBatch } from "./inbox.ts";
 import { runWechatChannel } from "./lifecycle.ts";
 import type { OutboxSender } from "./outbox.ts";
+import { boundedModels } from "./model-limits.ts";
+import { RequestMarkerGate } from "./request-gate.ts";
+import { maximumRequestCost } from "./run-admission.ts";
 
 /** Offline-testable single-owner runtime; the caller supplies a fully populated
  * model/registry and sender, and must explicitly confirm the legacy owner stopped.
@@ -21,8 +24,6 @@ export const runAssistantDaemon = async (options: {
   config: WechatConfig;
   credentials: Credentials;
   harnessOptions: Omit<HarnessOptions, "registry">;
-  /** Test-only registry override; production always installs the complete assistant extension. */
-  registry?: HarnessOptions["registry"];
   api: WechatApi;
   cdn: WechatCdn;
   sender: OutboxSender;
@@ -35,6 +36,8 @@ export const runAssistantDaemon = async (options: {
 }): Promise<void> => {
   const { config } = options;
   if (!options.legacyStopped) throw Error("Legacy plugin shutdown must be explicitly confirmed");
+  const selectedModel = options.harnessOptions.models.getModel(config.model.provider, config.model.modelId);
+  if (selectedModel) maximumRequestCost(selectedModel, config.limits.modelOutputTokens);
   const controller = new AbortController();
   const stop = () => controller.abort();
   options.signal.addEventListener("abort", stop, { once: true });
@@ -47,13 +50,22 @@ export const runAssistantDaemon = async (options: {
   try {
     // Opening the runtime only performs local recovery. The pump is started by
     // cursor(), which pollWechat calls AFTER runWechatChannel acquired the lock.
-    const builtRegistry = createRegistry();
-    if (!options.registry) builtRegistry.install(assistantExtension({ memoryPromptBytes: config.limits.memoryPromptBytes,
+    const registry = createRegistry(); const gate = new RequestMarkerGate();
+    registry.install(assistantExtension({ memoryPromptBytes: config.limits.memoryPromptBytes,
+      limits: config.limits, gate,
       workspace: { root: config.workspaceDir, maxBytes: config.limits.attachmentBytes }, mediaRoot: resolve(config.dataDir, "media"),
       harness: () => { if (!harness) throw Error("Assistant owner not ready"); return harness; },
       boundUserId: config.boundUserId, shellEnabled: config.shell.enabled }));
-    const registry = options.registry ?? builtRegistry;
-    harness = await openAssistantRuntime(resolve(config.dataDir, "assistant.sqlite"), { ...options.harnessOptions, registry },
+    harness = await openAssistantRuntime(resolve(config.dataDir, "assistant.sqlite"), {
+      ...options.harnessOptions,
+      models: boundedModels(options.harnessOptions.models, config.limits, gate, () => { if (!harness) throw Error("Assistant owner not ready"); return harness; }),
+      settings: { ...options.harnessOptions.settings,
+        stream: { ...options.harnessOptions.settings?.stream,
+          timeoutMs: Math.min(options.harnessOptions.settings?.stream?.timeoutMs ?? config.limits.runTimeoutMs, config.limits.runTimeoutMs),
+          maxRetries: Math.min(options.harnessOptions.settings?.stream?.maxRetries ?? config.limits.modelRetries, config.limits.modelRetries) },
+        retry: { ...options.harnessOptions.settings?.retry,
+          maxRetries: Math.min(options.harnessOptions.settings?.retry?.maxRetries ?? config.limits.modelRetries, config.limits.modelRetries) } },
+      registry },
       { accountId: config.accountId, userId: config.boundUserId, model: config.model },
       { root: resolve(config.dataDir, "media"), maxBytes: config.limits.attachmentBytes, cdn: options.cdn, signal: controller.signal });
     const owner = harness;
@@ -69,7 +81,7 @@ export const runAssistantDaemon = async (options: {
           pump = runAssistantPump(owner, { recipient: config.boundUserId, signal: controller.signal,
             sender: options.sender, media: { root: resolve(config.dataDir, "media"), maxBytes: config.limits.attachmentBytes, cdn: options.cdn },
             mediaSender: { policy: { root: config.workspaceDir, maxBytes: config.limits.attachmentBytes }, api: options.api, cdn: options.cdn, token: options.credentials.token },
-            onError: options.onPumpError, intervalMs: 1_000 });
+            onError: options.onPumpError, intervalMs: 1_000, runTimeoutMs: config.limits.runTimeoutMs });
           // Observe a failed pump immediately, including while long-poll is in flight.
           void pump.catch((error: unknown) => { pumpFailure = error; controller.abort(); });
         }

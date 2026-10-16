@@ -5,7 +5,7 @@
   "description": "Learning project: build durable agent apps on @earendil-works/pi-durable",
   "type": "module",
   "engines": {
-    "node": ">=22.6"
+    "node": ">=24.14.1"
   },
   "scripts": {
     "hello": "node examples/01-hello.ts",

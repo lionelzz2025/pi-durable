@@ -1,5 +1,46 @@
 # Progress Log
 
+## B6 N17/N19 专项与阶段中途完整回归（仍未完成）
+
+- 新增真实子进程从不同 cwd 加载相同配置并运行 `doctor`：证实默认配置路径锚定项目、同配置 SQLite 路径不漂移；`config-cli` 7/7。新增任务超时补扫：单 owner pump 按 Session 持久 `startedAt` 对过期 generation 发起协作式 abort，跳过已请求取消任务；假 Harness 专项通过。模型门闩绑定具体 provider/model，标记不出现在实际请求中，错误报价/不足预算都在 provider 前拒绝。
+- 最新 `npm run typecheck && npm test && git diff --check` **154/154、0 fail/skip**（约 338 秒）通过；旧基线与新路线均纳入。静态检索新入口无对全局 `pi-coding-agent`/`pi-wechat-assistant` 运行时依赖（来源注释与手册许可说明不算依赖）。
+- **B6 仍 in_progress，未提交**：N19 超时取消仅协作式、缺实进程长挂故障注入；报价可信度/提供商遵从限幅待获授权后 B7 实证；N20 离线入口仅 `doctor` 子进程、fake daemon 仍为测试注入，尚未逐项形成完整矩阵/许可清单。N18 正式迁移另需授权。下一步补 N19 长挂取消专项、N20 自测入口/依赖审计和 N01–N20 映射，再核对能否阶段提交。
+
+## B6 N19 模型边界部分落地（阶段未完成）
+
+- 核对 SDK 发现 `GenerationTask.beforeRequest` hook 的抛错被 scheduler `hooks.each` 捕获并仅上报，**不能靠 hook 异常阻断付费 provider**。新增一次性 `RequestMarkerGate`：持久化计数/UTC 日费预留成功后给本次请求的上下文附不可复用内存标记；`boundedModels.streamSimple` 在 provider 边界验标后剥离，hook 缺失/失败/重放标记都在 provider 前 fail-closed。daemon 不再接受绕过内建扩展的 registry override。
+- 新增任务级 `RunAdmission`（含最坏重试次数计数和下一次模型请求前耗时检查）、Session 级 `DailyModelCost`（按最大上下文/最高费率/重试次数保守预留，非 faux 零价格 fail-closed，不因成功而退回以覆盖内部重试）、输出/超时/重试选项限幅。压缩用 `completeSimple` 独立预留。重启日费持续约束、工具回合第二次请求阻断、预算不足前无 provider 调用、无标记/重用标记和压缩独立调用专项 **8/8**，typecheck/diff --check 通过。原先仅 hook 的错误单测侥幸通过，已用付费假模型负例揭露并修正。
+- **N19 未完成、B6 仍 in_progress，无提交**：`runTimeoutMs` 非总运行时硬中断（工具和长挂调用需专门 abort）、付费 provider 对 timeout/maxTokens/maxRetries 的遵从及报价真实性待 B7 实证，日费是保守预留不是精确账单；N17/N20 和完整 N01–N20 矩阵仍待收口。文档已明确边界，未触碰真实微信/付费模型/正式旧库。
+
+## B6 阶段中途全量回归（仍未完成）
+
+- B6 迁移/备份/诊断/手册改动后 `npm test` 完整离线回归 **146/146、0 fail/skip**（约 248 秒）；此前 `npm run typecheck` 与 `git diff --check` 通过。新增测试覆盖旧库独占拒绝、原 ID/回执和迁移 marker 幂等、事务故障回滚、SQLite WAL 一致备份/独立恢复、损坏副本拒绝、CLI 显式授权与离线状态诊断。**不是 B6 完成证据**：N19 模型预算/运行时长/重试硬边界未实现，N17/N20 还需核对真实不同 cwd 与入口依赖、许可和手册，未做正式迁移。阶段保持 in_progress，无提交。
+
+## B6 N17–N20 差距复核（阶段未完成）
+
+- `doctor`/`status` 原错误返回 `runtime:not-integrated`，实际 B5 daemon 已接线；改为 `offline-not-probed`，明确本机配置有效但账号锁、远端凭据及运行状态未核验。专项含状态负例合计 10/10、typecheck、diff --check 通过。运行手册补离线备份/迁移/恢复示例与不覆盖/不自动回流/不导入旧记忆边界；更新 `verification.md` 顶部为 B0–B5 离线完成、B6 进行中。
+- 查 `config.ts` 和 provider 实际接线：`runTimeoutMs`、`modelRetries`、`modelOutputTokens`、`runModelRequests`、`dailyCostUsd` 当前**仅解析没有在模型路径落实**。N19 不能标通过；手册醒目提示不能把这些当费用保险丝。备份损坏拒绝、目标不创建负例 1/1 通过。下一步必须设计并测试真实 provider 前的硬阻断及成本记账，补不同 cwd/崩溃/回滚差异专项和全量矩阵。B6 仍 in_progress，未提交。
+
+## B6 迁移 CLI 端到端专项（阶段继续）
+
+- 调整 `migrate` 必须先生成不同路径的一致旧库备份，再从该备份导出，绝不直接修改旧库；CLI 要求 `--allow-migration` 和绝对源/备份路径。新增旧库→CLI→备份→新 Harness 待办索引→marker 重放测试，专项 3/3、typecheck 通过。真实旧库未操作，测试只在 `data/test-runs` 下留样。
+- 余项：CLI 备份恢复失败注入和不同 cwd、N01–N20 证据矩阵、状态/doctor 文案、预算脱敏与手册、全量回归。`task_plan.md` B6 仍 in_progress，不提交。
+
+## B6 离线备份/恢复与维护命令接线（仍未完成）
+
+- 新增 `src/wechat-assistant/backup.ts`：旧库停止后 SQLite backup API 生成一致副本并做 integrity_check；源被 EXCLUSIVE owner 持有时拒绝，目标已有文件拒绝覆盖；恢复到全新路径，不自动覆盖现有库或删除中间文件。首个专项发现先预留目标再探测锁会留下占位导致下次 EEXIST，已改为先探测源；备份专项 1/1。
+- `main.ts` 新增显式 `--allow-migration --source` 的离线 backup/restore/migrate 路径，目标绝对路径且不自动连接微信；导入仅同一 Harness 将旧 todo/receipt + index/marker 原子提交。当前维护命令和导出/备份/配置专项合计 **8/8**、typecheck/diff --check 通过。正式数据迁移仍需授权；尚未补齐 CLI 端到端、恢复故障注入、运维矩阵/全量测试及手册，B6 不标完成、不提交。
+
+## B6 本轮：旧库迁移原语与事务故障验证（未完成）
+
+- 读计划/进度并运行已安装 `scripts/check-complete.sh`：6/8 complete、B6 in_progress、B7 pending；修正计划顶部 B6 状态与 Phase 行不一致。旧 Session 文档家族与新 Harness 同 kind，需扫描旧库全量 todo/receipt，再以一个新 Harness commit 导入 index、原 ID/时间/状态、操作回执和迁移 marker/hash。
+- 新增 `src/wechat-assistant/migration.ts` 与 `tests/wechat-assistant/migration.test.ts`：旧库独占锁占用拒绝导出、停止后只读业务导出、源目标不同路径、重复导入不重复、hash 篡改拒绝、事务中途错误不留下部分 todo/index/marker。typecheck 与专项 **2/2** 通过。尚无一致物理备份/恢复/回滚及 CLI 接线、全量测试，未触碰真实旧库，B6 保持进行中。
+
+## B6 起步：迁移契约核对
+
+- B5 已在本地提交 `c701f8f`，未推送；`check-complete.sh` 显示 6/8 complete、B6 in_progress、B7 pending。旧 `src/assistant/store.ts` 的 `TodoDoc`/`ReceiptDoc` 为 session-scope family，回执包含 operationId、fingerprint、requestKind、todo；迁移必须保留这两个 family 的业务 ID 和回执，不能仅通过 createTodo 重新生成。`src/assistant/storage.ts` 的旧库必须单持有者停机后做一致备份；新 Harness 使用独占 Storage，不能在同库打开第二个 Session。
+- `src/wechat-assistant/main.ts` 的 `backup`/`migrate` 当前仍显式拒绝，`doctor`/`status` 有旧的 `not-integrated` 文案；这些属于 B6 实际待做而不是已验收。下步设计只读旧库导出、带 marker/hash 的原子导入以及一致备份/恢复故障注入；不触碰真实旧库，正式迁移仍需授权。
+
 ## B5 离线阶段验收完成，转入 B6
 
 - 对照 B5 三项与 N14–N16：图片/文件加密接收和 outbox 协议假发送、无能力/视频/空转写的确定性通知 outbox；受信任工作区读写编辑、敏感路径/junction/大小边界、媒体冻结哈希；默认关闭的 shell、同 owner TTY 双重持久审批/过期/重放拒绝；任务状态/取消/恢复、单次/周期提醒到期补扫、occurrence 去重、本人 context 缺失 blocked。具体负例见 `tests/wechat-assistant/{inbox,b5,b5-media-outbox,b5-approvals,b5-daemon,b5-reminders,b5-scheduler,outbox}.test.ts` 等。

@@ -2,7 +2,7 @@
 
 ## 当前里程碑
 
-B0–B4 的离线阶段验证已通过（B4 仅文字内测）；B5 的媒体、工作区、任务/提醒及单进程 daemon 正在实现和审计。它**不是完整交付**：真实微信、真实模型、迁移/备份与现场 Ctrl-C 均未验收。不要把离线假传输测试当作正式切换许可。阶段状态以开发计划为准。
+B0–B5 已完成离线阶段验证；B6 的迁移/运维自动化仍在开发，B7 真实平台验收未做。它**不是完整交付**：真实微信、真实模型、正式数据迁移与现场 Ctrl-C 均未验收。不要把离线假传输测试当作正式切换许可。阶段状态以开发计划为准。
 
 ## 配置
 
@@ -20,14 +20,27 @@ B0–B4 的离线阶段验证已通过（B4 仅文字内测）；B5 的媒体、
 }
 ```
 
-账号/用户 ID 必须预先显式配置，扫码身份不匹配拒绝保存，不自动切换身份。首次获取 ID 需另行受控确认；当前不提供自动信任任意扫码者的模式。limits 允许覆盖 [冻结规格](wechat-assistant-spec.md) 中的值；逐项实际限制及现场能力仍待 B6/B7 核对。shell 默认关闭；只有本机配置开启、在同一运行进程的 TTY 查看完整命令与参数并二次确认后，才允许一次执行。它不是沙箱，命令可产生外部副作用；未提供交互式 TTY 时不要启用 shell。工作区被视为本机受信任目录；读写和附件发送拒绝常见敏感路径（如 `.env`、`.git`、`.ssh`、`.pi`、`*.pem`）及 symlink/junction，但不是秘密内容分类器，也不承诺抵御同机恶意进程并发替换目录的竞态。不得把凭据目录放入工作区。
+账号/用户 ID 必须预先显式配置，扫码身份不匹配拒绝保存，不自动切换身份。首次获取 ID 需另行受控确认；当前不提供自动信任任意扫码者的模式。limits 允许覆盖 [冻结规格](wechat-assistant-spec.md) 中的值；B6 已将模型单次输出/请求超时/重试参数限幅、每 generation 的模型请求保守计数与 UTC 日费用**上界预留**接入 daemon，并覆盖压缩请求。价格目录未知的非 faux 模型会拒绝调用，必须先提供可信非零价格；预留按模型最大上下文及重试次数计，不根据单次成功回执退回，可能提前耗尽预算。提供商若超出声明上界或不遵守选项，无法保证绝对费用上限；daemon 的单 owner pump 会按持久 task 起始时间标记超时并请求取消，但工具/提供商的取消为协作式，不保证硬中断，N19 仍待实际超时故障注入。shell 默认关闭；只有本机配置开启、在同一运行进程的 TTY 查看完整命令与参数并二次确认后，才允许一次执行。它不是沙箱，命令可产生外部副作用；未提供交互式 TTY 时不要启用 shell。工作区被视为本机受信任目录；读写和附件发送拒绝常见敏感路径（如 `.env`、`.git`、`.ssh`、`.pi`、`*.pem`）及 symlink/junction，但不是秘密内容分类器，也不承诺抵御同机恶意进程并发替换目录的竞态。不得把凭据目录放入工作区。
 
 ```text
 npm run wechat-assistant -- doctor
 npm run wechat-assistant -- status
 ```
 
-诊断与状态不会访问微信网络。status 仅报告本地凭据，不宣称远端有效或服务在线；当前读取会建立空凭据库。backup/migrate 尚未实现，明确拒绝。
+诊断与状态不会访问微信网络。status 仅报告本地凭据，不宣称远端有效或服务在线；当前读取会建立空凭据库。doctor 只检验配置，不探测数据库或账号锁。backup/restore/migrate 为**离线维护命令**，不自动连接微信；必须传 `--allow-migration` 和绝对源/目标路径，不能覆盖已存在的目标文件。
+
+## 离线备份、迁移与回滚（测试库已验证，正式数据需另行授权）
+
+停止旧服务并核对其账号/进程归属后，使用不同于旧库和新库的绝对路径保存备份。不可直接复制 WAL 模式下的主 `.sqlite` 文件，也不可在旧服务仍运行时强制迁移。下列路径仅为示例，**不要在未授权时照抄执行到真实数据库**：
+
+```text
+npm run wechat-assistant -- backup --config D:/tools/pi-durable/data/wechat-assistant/config.json --allow-migration --source D:/path/old/assistant.sqlite --destination D:/path/safe/old-backup.sqlite
+npm run wechat-assistant -- migrate --config D:/tools/pi-durable/data/wechat-assistant/config.json --allow-migration --source D:/path/old/assistant.sqlite --destination D:/path/safe/migration-backup.sqlite
+npm run wechat-assistant -- restore --config D:/tools/pi-durable/data/wechat-assistant/config.json --allow-migration --source D:/path/safe/migration-backup.sqlite --destination D:/path/new/restored.sqlite
+```
+
+`migrate` 先备份旧库，再从备份导入旧待办及 operation 回执；新库中的 `TodoIndex`、原 ID/时间/状态、回执及 hash marker 一次事务提交，失败不写一半。同一内容再次调用导入原语是幂等的，但 CLI 不覆盖已存在的备份路径。`restore` 只生成新的库文件，不替换现有正式库。回滚时先停止新实例、记录新库相对旧库新增/修改的待办、记忆、回复和提醒等差异，再重新启动保留的旧栈；新数据**不会**自动回流旧库。导入不迁移 pi transcript 或 hermes-memory。失败留存的部分备份需要人工检查并按回收站规则处理，不自动删除。
+
 
 ## 真实连接必须单独授权
 

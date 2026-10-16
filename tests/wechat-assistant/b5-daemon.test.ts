@@ -25,6 +25,17 @@ const fixture = () => {
   return { root, config, harnessOptions: { models } };
 };
 
+test("unpriced non-faux model fails startup before account lock or poll", async () => {
+  const { root, config } = fixture(); config.model = { provider: "unpriced", modelId: "faux-1" };
+  const models = createModels(); const unpriced = fauxProvider({ provider: "unpriced" }); models.setProvider(unpriced.provider);
+  let polled = false;
+  await assert.rejects(runAssistantDaemon({ config, credentials: credential, harnessOptions: { models }, legacyStopped: true,
+    api: new WechatApi({ transport: async () => { polled = true; throw Error("unexpected poll"); } }),
+    cdn: new WechatCdn(async () => { throw Error("unexpected CDN"); }), sender: async () => {}, signal: new AbortController().signal,
+    lockRoot: resolve(root, "lock"), onState: () => {} }), /price unavailable/);
+  assert.equal(polled, false);
+});
+
 test("single-owner shell approval uses the same Harness while polling and consumes once", async () => {
   const { root, config, harnessOptions } = fixture(); config.shell.enabled = true;
   const controller = new AbortController(); let approvalReached = false;
